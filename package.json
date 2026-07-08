@@ -1,0 +1,20 @@
+{
+  "name": "bayan-pos",
+  "version": "1.0.0",
+  "description": "Bayan POS System",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-packager . \"Bayan POS\" --platform=win32 --arch=x64 --out=dist --overwrite --icon=media/logo.ico --asar"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "bytenode": "^1.6.0",
+    "electron": "^42.4.1",
+    "electron-packager": "^17.1.2",
+    "fs-extra": "^11.3.5",
+    "javascript-obfuscator": "^5.4.3",
+    "png-to-ico": "^3.0.1"
+  }
+}
