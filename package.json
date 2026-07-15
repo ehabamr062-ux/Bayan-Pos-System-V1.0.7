@@ -5,14 +5,39 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "package": "electron-packager . \"Bayan POS\" --platform=win32 --arch=x64 --out=dist --overwrite --icon=media/logo.ico --asar"
+    "package": "electron-builder --win"
   },
-  "author": "",
+  "build": {
+    "appId": "com.diamondvision.bayanpos",
+    "productName": "Bayan POS",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "media/logo.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Bayan POS"
+    },
+    "asar": true
+  },
+  "author": "Diamond Vision",
   "license": "ISC",
   "devDependencies": {
     "bytenode": "^1.6.0",
-    "electron": "^42.4.1",
-    "electron-packager": "^17.1.2",
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3",
     "fs-extra": "^11.3.5",
     "javascript-obfuscator": "^5.4.3",
     "png-to-ico": "^3.0.1"

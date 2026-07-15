@@ -1,1 +1,187 @@
-const _0x3ec1dd=_0x100d;(function(_0x5dbcfb,_0x554c72){const _0x3eb100=_0x100d,_0x5eb76a=_0x5dbcfb();while(!![]){try{const _0x5e4cce=-parseInt(_0x3eb100(0x18e))/0x1+-parseInt(_0x3eb100(0x16e))/0x2+parseInt(_0x3eb100(0x171))/0x3*(parseInt(_0x3eb100(0x197))/0x4)+parseInt(_0x3eb100(0x18a))/0x5*(parseInt(_0x3eb100(0x19b))/0x6)+-parseInt(_0x3eb100(0x1ac))/0x7+parseInt(_0x3eb100(0x191))/0x8*(parseInt(_0x3eb100(0x16a))/0x9)+-parseInt(_0x3eb100(0x16b))/0xa;if(_0x5e4cce===_0x554c72)break;else _0x5eb76a['push'](_0x5eb76a['shift']());}catch(_0x54439b){_0x5eb76a['push'](_0x5eb76a['shift']());}}}(_0x22be,0xa6d99));const {app,BrowserWindow,ipcMain,dialog,shell,Menu}=require(_0x3ec1dd(0x19a)),path=require(_0x3ec1dd(0x16d)),fs=require('fs');function _0x100d(_0x4cd62a,_0x1c99f9){_0x4cd62a=_0x4cd62a-0x15c;const _0x22befb=_0x22be();let _0x100de0=_0x22befb[_0x4cd62a];if(_0x100d['hPPKNs']===undefined){var _0x3a99f8=function(_0x1ec824){const _0x1cf526='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let _0x1305cc='',_0x2915ac='';for(let _0x1030a2=0x0,_0x24e043,_0x467914,_0x99f2ab=0x0;_0x467914=_0x1ec824['charAt'](_0x99f2ab++);~_0x467914&&(_0x24e043=_0x1030a2%0x4?_0x24e043*0x40+_0x467914:_0x467914,_0x1030a2++%0x4)?_0x1305cc+=String['fromCharCode'](0xff&_0x24e043>>(-0x2*_0x1030a2&0x6)):0x0){_0x467914=_0x1cf526['indexOf'](_0x467914);}for(let _0x532943=0x0,_0x2d1e2d=_0x1305cc['length'];_0x532943<_0x2d1e2d;_0x532943++){_0x2915ac+='%'+('00'+_0x1305cc['charCodeAt'](_0x532943)['toString'](0x10))['slice'](-0x2);}return decodeURIComponent(_0x2915ac);};_0x100d['zxaoDz']=_0x3a99f8,_0x100d['aRHFPE']={},_0x100d['hPPKNs']=!![];}const _0x1a8697=_0x22befb[0x0],_0x42c6fe=_0x4cd62a+_0x1a8697,_0x16ce0e=_0x100d['aRHFPE'][_0x42c6fe];return!_0x16ce0e?(_0x100de0=_0x100d['zxaoDz'](_0x100de0),_0x100d['aRHFPE'][_0x42c6fe]=_0x100de0):_0x100de0=_0x16ce0e,_0x100de0;}let mainWindow,isQuitting=![];function createWindow(){const _0x1ebcd2=_0x3ec1dd;Menu[_0x1ebcd2(0x161)](null),mainWindow=new BrowserWindow({'width':0x4b0,'height':0x320,'webPreferences':{'nodeIntegration':!![],'contextIsolation':![],'devTools':![]},'icon':path[_0x1ebcd2(0x15f)](__dirname,_0x1ebcd2(0x1a0),_0x1ebcd2(0x163))}),mainWindow[_0x1ebcd2(0x174)]('index.html'),mainWindow[_0x1ebcd2(0x18f)]['on'](_0x1ebcd2(0x17a),(_0x1305cc,_0x2915ac)=>{const _0x3fab08=_0x1ebcd2;if(_0x2915ac[_0x3fab08(0x1a4)]===_0x3fab08(0x165)||_0x2915ac[_0x3fab08(0x193)]&&_0x2915ac[_0x3fab08(0x19e)]&&_0x2915ac[_0x3fab08(0x1a4)][_0x3fab08(0x180)]()==='i'){_0x1305cc[_0x3fab08(0x1a6)]();return;}if(_0x2915ac[_0x3fab08(0x17d)]===_0x3fab08(0x16c)&&(_0x2915ac['key']==='F5'||_0x2915ac[_0x3fab08(0x193)]&&_0x2915ac[_0x3fab08(0x1a4)][_0x3fab08(0x180)]()==='r')){mainWindow[_0x3fab08(0x18f)][_0x3fab08(0x1af)](),_0x1305cc['preventDefault']();return;}if(_0x2915ac[_0x3fab08(0x17d)]==='keyDown'&&_0x2915ac[_0x3fab08(0x1a4)]===_0x3fab08(0x160)){mainWindow[_0x3fab08(0x16f)](!mainWindow[_0x3fab08(0x173)]()),_0x1305cc[_0x3fab08(0x1a6)]();return;}}),mainWindow[_0x1ebcd2(0x18f)]['on']('context-menu',_0x1030a2=>{const _0x538252=_0x1ebcd2;_0x1030a2[_0x538252(0x1a6)]();}),mainWindow['on'](_0x1ebcd2(0x17b),_0x24e043=>{const _0x2e95f0=_0x1ebcd2;!isQuitting&&(_0x24e043[_0x2e95f0(0x1a6)](),mainWindow[_0x2e95f0(0x18f)][_0x2e95f0(0x18d)]('trigger-backup-before-quit'),setTimeout(()=>{const _0xbc6a20=_0x2e95f0;isQuitting=!![],app[_0xbc6a20(0x183)]();},0x7d0));}),mainWindow[_0x1ebcd2(0x18f)][_0x1ebcd2(0x184)]['on'](_0x1ebcd2(0x17c),(_0x467914,_0x99f2ab,_0x532943)=>{const _0x3d4251=_0x1ebcd2;_0x99f2ab[_0x3d4251(0x1ab)]({'defaultPath':path[_0x3d4251(0x15f)](app[_0x3d4251(0x169)](_0x3d4251(0x162)),_0x99f2ab[_0x3d4251(0x18b)]())}),_0x99f2ab['on'](_0x3d4251(0x1a8),(_0x2d1e2d,_0x1d6091)=>{const _0x440804=_0x3d4251;if(_0x1d6091===_0x440804(0x18c))console[_0x440804(0x1a7)](_0x440804(0x19f));else{if(_0x1d6091===_0x440804(0x189)){if(_0x99f2ab['isPaused']())console['log']('Download\x20is\x20paused');}}}),_0x99f2ab[_0x3d4251(0x167)](_0x3d4251(0x15d),(_0x1c07cc,_0x43d923)=>{const _0x337238=_0x3d4251;if(_0x43d923===_0x337238(0x19d))console['log'](_0x337238(0x182));else console[_0x337238(0x1a7)]('Download\x20failed:\x20'+_0x43d923);});});}app[_0x3ec1dd(0x190)]()[_0x3ec1dd(0x185)](()=>{createWindow(),app['on']('activate',function(){const _0x1058f7=_0x100d;if(BrowserWindow[_0x1058f7(0x1a2)]()[_0x1058f7(0x175)]===0x0)createWindow();});}),app['on'](_0x3ec1dd(0x1a5),function(){const _0x3ab88f=_0x3ec1dd;if(process[_0x3ab88f(0x1a9)]!==_0x3ab88f(0x178))app[_0x3ab88f(0x183)]();}),ipcMain['on'](_0x3ec1dd(0x179),(_0xa0730,_0x484f96)=>{const _0x571576=_0x3ec1dd;try{const _0xbf27fc=app[_0x571576(0x169)]('desktop'),_0x49774c=new Date()[_0x571576(0x168)](_0x571576(0x198))[_0x571576(0x17e)](/-/g,'_'),_0x3d81ea=path[_0x571576(0x15f)](_0xbf27fc,_0x571576(0x172)+_0x49774c+_0x571576(0x177));fs[_0x571576(0x187)](_0x3d81ea,_0x484f96,_0x571576(0x166)),console[_0x571576(0x1a7)]('Backup\x20saved\x20to',_0x3d81ea);}catch(_0x3f8e4c){console[_0x571576(0x176)](_0x571576(0x164),_0x3f8e4c);}finally{isQuitting=!![],app[_0x571576(0x183)]();}}),ipcMain['on'](_0x3ec1dd(0x170),()=>{isQuitting=!![],app['quit']();}),ipcMain[_0x3ec1dd(0x19c)](_0x3ec1dd(0x1ae),async(_0x23c020,_0x2e645b)=>{const _0x2e9e3a=_0x3ec1dd;try{await shell[_0x2e9e3a(0x188)](_0x2e645b);}catch(_0x41e764){require(_0x2e9e3a(0x17f))['exec']('start\x20\x22\x22\x20\x22'+_0x2e645b[_0x2e9e3a(0x17e)](/"/g,'\x5c\x22')+'\x22');}return!![];});const crypto=require('crypto'),LICENSE_SECRET=_0x3ec1dd(0x199);ipcMain[_0x3ec1dd(0x19c)](_0x3ec1dd(0x1a3),(_0x453048,_0x398de9,_0x2fd0a8,_0x5e2072)=>{const _0x4d5b8c=_0x3ec1dd;try{const _0x18b867=_0x398de9+'_'+_0x2fd0a8+'_'+_0x5e2072;return crypto[_0x4d5b8c(0x1aa)](_0x4d5b8c(0x192),LICENSE_SECRET)[_0x4d5b8c(0x195)](_0x18b867)[_0x4d5b8c(0x186)](_0x4d5b8c(0x181))['substring'](0x0,0x10)[_0x4d5b8c(0x194)]();}catch(_0x2c2392){return console[_0x4d5b8c(0x176)](_0x4d5b8c(0x196),_0x2c2392),'';}}),ipcMain[_0x3ec1dd(0x19c)](_0x3ec1dd(0x15c),(_0x16b60a,_0x111c0b,_0x3066da,_0xd3e656,_0x2c137c)=>{const _0x579dea=_0x3ec1dd;try{const _0x413b48=_0x111c0b+'_'+_0x3066da+'_'+_0xd3e656,_0xf45ca1=crypto[_0x579dea(0x1aa)](_0x579dea(0x192),LICENSE_SECRET)[_0x579dea(0x195)](_0x413b48)[_0x579dea(0x186)](_0x579dea(0x181))[_0x579dea(0x1a1)](0x0,0x10)[_0x579dea(0x194)]();return _0x2c137c===_0xf45ca1;}catch(_0x14536b){return console[_0x579dea(0x176)]('Failed\x20to\x20verify\x20signature\x20in\x20Main\x20Process:',_0x14536b),![];}}),ipcMain[_0x3ec1dd(0x19c)](_0x3ec1dd(0x1ad),(_0x740bcf,_0x4de8c2)=>{const _0x3100ac=_0x3ec1dd;try{return crypto[_0x3100ac(0x1aa)](_0x3100ac(0x192),LICENSE_SECRET)['update'](_0x4de8c2)['digest'](_0x3100ac(0x181))['substring'](0x0,0x10)[_0x3100ac(0x194)]();}catch(_0x5477ca){return console[_0x3100ac(0x176)](_0x3100ac(0x15e),_0x5477ca),'';}});function _0x22be(){const _0x1e51eb=['D2HLBLjLywr5','mJG5odr5yK5lDeC','C2HHmJu2','y29UDhjVBa','Dg9vChbLCKnHC2u','DxbKyxrL','rMfPBgvKihrVigDLBMvYyxrLihnPz25HDhvYzsbPBIbnywLUifbYB2nLC3m6','ndbjv3jju1a','zw4Tq0e','qKfzqu5Fue9tx1nfq1jfvf9lrvLFmJaYnG','zwXLy3rYB24','nJu3nJi0nLbHCvPJDa','AgfUzgXL','y29TCgXLDgvK','C2HPzNq','rg93BMXVywqGAxmGAw50zxjYDxb0zwqGyNv0ignHBIbIzsbYzxn1BwvK','BwvKAwe','C3vIC3rYAw5N','z2v0qwXSv2LUzg93CW','z2vUzxjHDguTBgLJzw5Zzs1ZAwDUyxr1CMu','A2v5','D2LUzg93lwfSBc1JBg9Zzwq','ChjLDMvUDerLzMf1Bhq','Bg9N','DxbKyxrLza','CgXHDgzVCM0','y3jLyxrLsg1HyW','C2v0u2f2zurPywXVz09WDgLVBNm','mtG1mtu2m3DrvgXTDq','AgfZAc1Hy3rPDMf0Aw9UlxbHEwXVywq','B3bLBI11CMW','CMvSB2fK','DMvYAwz5lwXPy2vUC2uTC2LNBMf0DxjL','zg9Uzq','rMfPBgvKihrVigHHC2GGywn0AxzHDgLVBIbWyxLSB2fKoG','AM9PBG','rJeX','C2v0qxbWBgLJyxrPB25nzw51','zgvZA3rVCa','Bg9NBY5WBMC','rMfPBgvKihrVihnHDMuGyMfJA3vWoG','rJeY','DxrMltG','B25Jzq','Dg9mB2nHBgveyxrLu3rYAw5N','z2v0ugf0Aa','mJqWm3fZz2HVqq','ndGZntCZmeH4wvjJzG','A2v5rg93BG','Cgf0Aa','mtG5nde3mLHfqNjTBa','C2v0rNvSBfnJCMvLBG','CxvPDc1KAxjLy3rSEq','mtK5nJuWAxbYwxPN','yMfJA3vWx3bVC18','AxngDwXSu2nYzwvU','Bg9HzezPBgu','BgvUz3rO','zxjYB3i','lMPZB24','zgfYD2LU','C2f2zs1IywnRDxaTyw5Klxf1Axq','yMvMB3jLlwLUChv0lwv2zw50','y2XVC2u','D2LSBc1KB3DUBg9Hza','DhLWzq','CMvWBgfJzq','y2HPBgrFChjVy2vZCW','Dg9mB3DLCKnHC2u','Agv4','rg93BMXVywqGC3vJy2vZC2z1BgX5','CxvPDa','C2vZC2LVBG','DgHLBG','zgLNzxn0','D3jPDgvgAwXLu3LUyW','B3bLBKv4DgvYBMfS','ChjVz3jLC3nPBMC','nwziCvjOAq','z2v0rMLSzw5HBwu','Aw50zxjYDxb0zwq','C2vUza','mZuWmJK3t2LbuK5U','D2vIq29UDgvUDhm'];_0x22be=function(){return _0x1e51eb;};return _0x22be();}
+const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=2048 --expose-gc');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-oop-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+
+let mainWindow;
+let isQuitting = false;
+const LICENSE_SECRET = 'BAYAN_POS_SECRET_KEY_2026';
+
+function createWindow() {
+    Menu.setApplicationMenu(null); // إلغاء القوائم الافتراضية
+
+    mainWindow = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        backgroundColor: '#0f172a',
+        webPreferences: {
+            nodeIntegration: true,        // مطلوب لاستخدام require() في الكود الحالي (IPC)
+            contextIsolation: false,      // يمنع preload scripts من التدخل في الصفحة
+            devTools: false               // تعطيل أدوات المطور أساسياً
+        },
+        icon: path.join(__dirname, 'media', 'bayan_logo.png')
+    });
+
+    mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+    // منع اختصارات لوحة المفاتيح الخاصة بالـ Console والـ Reload
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        const key = input.key.toLowerCase();
+        
+        // منع F12 و Ctrl+Shift+I و Ctrl+Shift+J و Ctrl+Shift+C
+        if (
+            input.key === 'F12' || 
+            (input.control && input.shift && (key === 'i' || key === 'j' || key === 'c'))
+        ) {
+            event.preventDefault();
+            return;
+        }
+
+        // منع إعادة التحميل العادية F5 أو Ctrl+R
+        if (input.key === 'F5' || (input.control && key === 'r')) {
+            mainWindow.webContents.reload();
+            event.preventDefault();
+            return;
+        }
+
+        // F11 للشاشة الكاملة
+        if (input.key === 'F11') {
+            mainWindow.setFullScreen(!mainWindow.isFullScreen());
+            event.preventDefault();
+            return;
+        }
+    });
+
+    // 🔒 الطبقة الدفاعية القوية: إغلاق أدوات المطور فوراً في حال فتحها بأي وسيلة
+    mainWindow.webContents.on('devtools-opened', () => {
+        mainWindow.webContents.closeDevTools();
+    });
+
+    // منع قائمة الزر الأيمن (كليك يمين)
+    mainWindow.webContents.on('context-menu', (e) => {
+        e.preventDefault();
+    });
+
+    // إدارة الإغلاق التلقائي وعمل النسخ الاحتياطي
+    mainWindow.on('close', (e) => {
+        if (!isQuitting) {
+            e.preventDefault();
+            mainWindow.webContents.send('trigger-backup-before-quit');
+            setTimeout(() => {
+                isQuitting = true;
+                app.quit();
+            }, 2000);
+        }
+    });
+
+    // إدارة التحميلات الآمنة
+    mainWindow.webContents.session.on('will-download', (event, item, webContents) => {
+        item.setSaveDialogOptions({
+            defaultPath: path.join(app.getPath('desktop'), item.getFilename())
+        });
+        item.on('updated', (event, state) => {
+            if (state === 'interrupted') {
+                console.log('Download is interrupted but can be resumed');
+            } else if (state === 'progressing') {
+                if (item.isPaused()) {
+                    console.log('Download is paused');
+                }
+            }
+        });
+        item.once('done', (event, state) => {
+            if (state === 'completed') {
+                console.log('Download successfully');
+            } else {
+                console.log('Download failed: ' + state);
+            }
+        });
+    });
+}
+
+// تهيئة التطبيق
+app.whenReady().then(() => {
+    createWindow();
+    app.on('activate', function () {
+        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+});
+
+app.on('window-all-closed', function () {
+    if (process.platform !== 'darwin') app.quit();
+});
+
+// قنوات الاتصال (IPC)
+ipcMain.on('save-backup-and-quit', (event, backupData) => {
+    try {
+        const desktopDir = app.getPath('desktop');
+        const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '_');
+        const backupPath = path.join(desktopDir, 'backup_pos_' + timestamp + '.json');
+        
+        fs.writeFileSync(backupPath, backupData, 'utf-8');
+        console.log('Backup saved to', backupPath);
+    } catch (err) {
+        console.error('Failed to save backup:', err);
+    } finally {
+        isQuitting = true;
+        app.quit();
+    }
+});
+
+ipcMain.on('quit-directly', () => {
+    isQuitting = true;
+    app.quit();
+});
+
+// فتح الروابط الخارجية بأمان مع التحقق من الـ Protocol
+ipcMain.handle('open-url', async (event, url) => {
+    try {
+        // ✅ أمان: السماح فقط بـ http و https و mailto ومنع أي بروتوكول آخر قد ينفّذ أوامر نظام
+        const parsedUrl = new URL(url);
+        const allowedProtocols = ['http:', 'https:', 'mailto:'];
+        if (!allowedProtocols.includes(parsedUrl.protocol)) {
+            console.error('⚠️ محاولة فتح رابط غير مسموح: ' + url);
+            return false;
+        }
+        await shell.openExternal(parsedUrl.href);
+    } catch (err) {
+        console.error('Failed to open URL:', err);
+    }
+    return true;
+});
+
+// تشفير وتوقيع التراخيص
+ipcMain.handle('generate-license-signature', (event, plan, expiry, machineId) => {
+    try {
+        const dataString = plan + '_' + expiry + '_' + machineId;
+        return crypto.createHmac('sha256', LICENSE_SECRET).update(dataString).digest('hex').substring(0, 16).toUpperCase();
+    } catch (err) {
+        console.error('Failed to generate signature:', err);
+        return '';
+    }
+});
+
+ipcMain.handle('verify-license-signature', (event, plan, expiry, machineId, userSig) => {
+    try {
+        const dataString = plan + '_' + expiry + '_' + machineId;
+        const expectedSig = crypto.createHmac('sha256', LICENSE_SECRET).update(dataString).digest('hex').substring(0, 16).toUpperCase();
+        return userSig === expectedSig;
+    } catch (err) {
+        console.error('Failed to verify signature in Main Process:', err);
+        return false;
+    }
+});
+
+ipcMain.handle('hash-activation-payload', (event, payload) => {
+    try {
+        return crypto.createHmac('sha256', LICENSE_SECRET).update(payload).digest('hex').substring(0, 16).toUpperCase();
+    } catch (err) {
+        console.error('Failed to hash activation payload:', err);
+        return '';
+    }
+});

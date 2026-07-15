@@ -1,6 +1,7 @@
 {
     "name": "Bayan POS - نظام بيان المتكامل",
     "short_name": "Bayan POS",
+    "version": "1.0.0",
     "description": "نظام بيان الذكي لإدارة المبيعات، الحسابات، والمخازن - يعمل أوفلاين 100%",
     "start_url": "./index.html",
     "scope": "./",

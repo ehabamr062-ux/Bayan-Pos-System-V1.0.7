@@ -5,14 +5,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bayan POS - Business Management System</title>
+    <script>
+        window.addEventListener('error', function(e) {
+            alert("خطأ برمجى (JS Error):\n" + e.message + "\nالملف: " + e.filename + "\nالسطر: " + e.lineno);
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+            alert("خطأ غير متوقع (Promise Rejection):\n" + e.reason);
+        });
+    </script>
     <!-- إعدادات PWA للعمل كططبيق منفصل (أوفلاين) -->
     <link rel="manifest" href="manifest.json">
 
+    <script>
+        if (typeof module === 'object') {
+            window.tempModule = module;
+            module = undefined;
+        }
+    </script>
     <script src="lib/html2canvas.min.js"></script>
     <script src="lib/dexie.js"></script>
     <script src="lib/xlsx.full.min.js"></script>
     <script src="lib/supabase.min.js"></script>
     <script src="lib/chart.min.js"></script>
+    <script>
+        if (window.tempModule) {
+            module = window.tempModule;
+            delete window.tempModule;
+        }
+    </script>
 
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -25,6 +45,7 @@
     <script src="js/translations.js?v=6"></script>
 
     <script src="js/api_key_manager.js"></script>
+    <script src="js/store.js?v=1" defer></script>
     <script src="js/core.js?v=45" defer></script>
     <script src="lib/JsBarcode.all.min.js"></script>
     <script src="js/utils.js?v=26" defer></script>
@@ -203,6 +224,27 @@
             visibility: visible;
             opacity: 1;
             transform: translate(-50%, -50%) scale(1);
+        }
+
+        .calc-modal.maximized {
+            width: 100vw !important;
+            height: 100vh !important;
+            max-height: 100vh !important;
+            top: 0 !important;
+            left: 0 !important;
+            transform: none !important;
+            border-radius: 0 !important;
+            border: none !important;
+            padding: 40px !important;
+            box-sizing: border-box !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        .calc-modal.maximized #calcDisplay,
+        .calc-modal.maximized .calc-grid,
+        .calc-modal.maximized #calcHeader {
+            width: 100% !important;
+            max-width: 450px !important;
         }
 
         .calc-display {
@@ -585,6 +627,9 @@
                     <div class="info-item" onclick="switchSection('invoices')"
                         style="cursor: pointer; font-weight: bold; background: transparent; color: white; border: none; padding: 2px 6px; border-radius: 6px; font-size: 0.72rem;"
                         data-i18n="nav_invoices">📑 الفواتير</div>
+                    <div class="info-item" onclick="switchSection('statement')"
+                        style="cursor: pointer; font-weight: bold; background: transparent; color: white; border: none; padding: 2px 6px; border-radius: 6px; font-size: 0.72rem;">
+                        📄 كشف حساب</div>
                     <div class="info-item" onclick="contactDeveloper()"
                         style="cursor: pointer; font-weight: bold; background: transparent; color: white; border: none; padding: 2px 6px; border-radius: 6px; font-size: 0.72rem;">
                         ❓ مساعدة</div>
@@ -598,41 +643,10 @@
                 </div>
             </div>
 
-            <div style="display:flex; gap:12px; align-items:center;">
-                <div id="connectionStatus" class="connection-status online" title="حالة الاتصال"
-                    style="background: transparent; border: 1px solid rgba(255,255,255,0.2);">
-                    <div class="status-dot"></div>
-                    <span id="statusText">متصل</span>
-                    <span id="currentWarehouseName"
-                        style="margin-right:8px; border-right: 1px solid rgba(255,255,255,0.3); padding-right:8px;">📦
-                        المخزن الرئيسي</span>
-                </div>
-
-                <div id="currentUserDisplay" style="background: transparent; border: none; box-shadow: none;">
-                    <span style="opacity: 0.8;">👤</span>
-                    <span id="userNameText">المدير (طوارئ) (مدير)</span>
-                </div>
-
-                <div class="notification-bell" onclick="showNotificationsModal()" title="تنبيهات النظام (نواقص وديون)">
-                    <span>🔔</span>
-                    <div id="bellBadge" class="bell-badge">0</div>
-                </div>
-
-                <!-- زر تبديل المظهر البريميوم -->
-                <button class="theme-toggle-btn-premium" onclick="toggleTheme()" title="تبديل المظهر (ليلي/نهاري)">
-                    <div class="theme-icon-container">
-                        <span class="sun-icon">☀️</span>
-                        <span class="moon-icon">🌙</span>
-                    </div>
-                </button>
-
-                <button class="btn-logout" onclick="logout()" title="تسجيل خروج" data-i18n="logout"
-                    style="padding: 2px 6px; font-size: 0.72rem; border-radius: 6px;">
-                    <span data-i18n="logout">🔒 خروج</span>
-                </button>
-            </div>
+            <!-- Empty space left after moving items to floating box -->
         </div>
     </div>
+
 
     <!-- نظام تبويبات النوافذ المتعددة -->
     <div id="tabBar" class="app-tab-bar">
@@ -646,7 +660,52 @@
     <div class="main-container">
 
         <!-- ================= لوحة التحكم الرئيسية (Main Dashboard - Metro Style) ================= -->
-        <div id="dashboard-section" class="section-view dashboard-theme">
+        <div id="dashboard-section" class="section-view dashboard-theme" style="position: relative;">
+
+            <!-- صندوق التحكم العائم (يضم كل أدوات النظام المهمة) - موجود فقط داخل الشاشة الرئيسية -->
+            <div class="floating-controls-box" style="position: absolute; top: 20px; left: 30px; z-index: 9998; display: flex; gap: 20px; align-items: center; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); padding: 12px 25px; border-radius: 25px; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 15px 35px rgba(0,0,0,0.4); flex-wrap: wrap; direction: rtl;">
+                
+                <button class="btn-logout" onclick="logout()" title="تسجيل خروج" data-i18n="logout"
+                    style="padding: 8px 15px; font-size: 0.9rem; border-radius: 12px; margin-left: 5px; display: flex; align-items: center; gap: 6px; background: #ef4444; color: #fff; border: none; cursor: pointer; transition: 0.3s; font-weight: bold; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.4);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    <span data-i18n="logout">خروج</span>
+                </button>
+
+                <!-- زر تبديل المظهر البريميوم -->
+                <button class="theme-toggle-btn-premium" onclick="toggleTheme()" title="تبديل المظهر (ليلي/نهاري)" style="transform: scale(1.1); margin: 0 5px; cursor: pointer;">
+                    <div class="theme-icon-container">
+                        <svg class="sun-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                        <svg class="moon-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                    </div>
+                </button>
+
+                <div class="notification-bell" onclick="showNotificationsModal()" title="تنبيهات النظام (نواقص وديون)" style="margin: 0 10px; position: relative; cursor: pointer;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                    <div id="bellBadge" class="bell-badge" style="position: absolute; top: -6px; right: -8px; background: #ef4444; color: white; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; border: 2px solid #0f172a;">0</div>
+                </div>
+
+                <div id="currentUserDisplay" style="background: transparent; border: none; box-shadow: none; padding: 0 15px; border-right: 1px solid rgba(255,255,255,0.2); border-left: 1px solid rgba(255,255,255,0.2); display: flex; align-items: center; gap: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    <span id="userNameText" style="color: #fff; font-size: 0.95rem; font-weight: bold;">المدير (طوارئ) (مدير)</span>
+                </div>
+
+                <div id="connectionStatus" class="connection-status online" title="حالة الاتصال"
+                    style="background: transparent; border: none; padding: 0; display: flex; align-items: center; gap: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                    <span id="currentWarehouseName"
+                        style="color: #fff; font-size: 0.95rem; font-weight: bold;">المخزن الرئيسي</span>
+                    <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.3); margin: 0 8px;"></div>
+                    <span id="statusText" style="color: #fff; font-size: 0.95rem; font-weight: bold;">متصل</span>
+                    <div class="status-dot" style="margin-right: 5px;"></div>
+                </div>
+
+                <!-- تخصيص مظهر البرنامج مدمج معهم -->
+                <div id="wallpaperTrigger" onclick="toggleWallpaperMenu()"
+                    title="تخصيص مظهر البرنامج" style="width: 42px; height: 42px; background: linear-gradient(135deg, var(--accent-gold), #b48529); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.3); margin-right: 15px; transition: 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(15deg)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="#fff"></circle><circle cx="17.5" cy="10.5" r=".5" fill="#fff"></circle><circle cx="8.5" cy="7.5" r=".5" fill="#fff"></circle><circle cx="6.5" cy="12.5" r=".5" fill="#fff"></circle><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c1.38 0 2.5-1.12 2.5-2.5 0-.53-.21-1.04-.59-1.41-.36-.36-.59-.86-.59-1.41 0-1.12.88-2 2-2h1.5c2.76 0 5-2.24 5-5 0-4.42-4.48-8-10-8z"></path></svg>
+                </div>
+
+            </div>
 
             <!-- 📡 شريط إشعارات عمران (Supabase Marquee) -->
             <div id="admin-announcement-bar"
@@ -662,31 +721,31 @@
                 <div class="dm-header-right" style="display: flex; gap: 12px;">
                     <div class="dm-top-tile" onclick="switchSection('price-tracking')" data-perm="stock_view"
                         style="background: linear-gradient(135deg, #0f172a, #334155); border-bottom: 3px solid #f59e0b;">
-                        <span class="icon">💰</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg></span>
                         <span class="label" style="color:#f59e0b;" data-i18n="nav_price_tracking">متابعة الأسعار</span>
                     </div>
 
                     <div class="dm-top-tile" onclick="switchSection('invoices')" data-perm="docs_view">
-                        <span class="icon">📁</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>
                         <span class="label" data-i18n="nav_invoices">الفواتير</span>
                     </div>
                     <div class="dm-top-tile" onclick="switchSection('accounts')" data-perm="accounts_view">
-                        <span class="icon">👥</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
                         <span class="label" data-i18n="nav_accounts">الحسابات</span>
                     </div>
                     <div class="dm-top-tile" onclick="switchSection('inventory')" data-perm="stock_view">
-                        <span class="icon">🚚</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></span>
                         <span class="label" data-i18n="nav_inventory">البضاعة</span>
                     </div>
                     <div class="dm-top-tile" onclick="switchSection('product-inquiry')" data-perm="stock_view"
                         style="background: linear-gradient(135deg, #0f172a, #334155); border-bottom: 3px solid #8b5cf6;">
-                        <span class="icon">🔍</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
                         <span class="label" style="color:#a78bfa; font-size: 0.65rem;"
                             data-i18n="nav_product_inquiry">استعلام الأصناف</span>
                     </div>
                     <div class="dm-top-tile" onclick="switchSection('ai-assistant')"
                         style="background: linear-gradient(135deg, #1e1b4b, #311042); border-bottom: 3px solid #d946ef;">
-                        <span class="icon">🤖</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8" y2="16"></line><line x1="16" y1="16" x2="16" y2="16"></line></svg></span>
                         <span class="label" style="color:#f5d0fe;" data-i18n="nav_ai">مساعد بيان</span>
                     </div>
                 </div>
@@ -705,38 +764,38 @@
                     <div class="dm-mid-tile"
                         style="background: #020617; border: 2px solid #d4af37; flex: 1.5; height: 110px; cursor: default; transform: none !important; position: relative; overflow: hidden; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 25px rgba(212, 175, 55, 0.25); border-radius: 16px; padding: 0; display: flex; align-items: center; justify-content: center;">
                         <img src="media/bayan_logo.png"
-                            style="width: 100%; height: 100%; object-fit: cover; display: block;" alt="Bayan POS Logo">
+                            style="width: 100%; height: 100%; object-fit: cover; display: block; transform: scale(1.4);" alt="Bayan POS Logo">
                     </div>
 
                     <div class="dm-mid-tile" onclick="switchSection('analysis')" data-perm="general_profits">
-                        <span class="icon" style="font-size: 2rem;">📊</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>
                         <span class="label" style="font-size: 0.9rem; font-weight: 900;">تحليل مبيعات</span>
                     </div>
                     <div class="dm-mid-tile" onclick="switchSection('daily-report')" data-perm="general_reports"
                         style="background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid rgba(16, 185, 129, 0.3);">
-                        <span class="icon" style="font-size: 2rem;">📈</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg></span>
                         <span class="label" style="font-size: 0.9rem; font-weight: 900;">تقرير الحركة اليومية</span>
                     </div>
                 </div>
 
                 <div class="dm-mid-group">
                     <div class="dm-mid-tile blue" onclick="openNewAccountModal()" data-perm="accounts_add">
-                        <span class="icon">👥</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg></span>
                         <span class="label">إضافة حساب جديد</span>
                     </div>
                     <div class="dm-mid-tile blue" onclick="openNewItemModal()" data-perm="stock_add">
-                        <span class="icon">📋</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg></span>
                         <span class="label">إضافة صنف جديد</span>
                     </div>
                     <div class="dm-mid-tile"
                         style="background: linear-gradient(135deg, #1e293b, #0f172a); border: 2px solid var(--gold); color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; transition: 0.3s; border-radius: 15px; padding: 10px; text-align: center;"
                         onclick="openPriceAdjustmentModal()" data-perm="stock_edit">
-                        <span style="font-size: 1.8rem;">💰</span>
+                        <span class="icon" style="margin-bottom: 5px;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg></span>
                         <span style="font-weight: 900; color: var(--gold); font-size: 0.82rem; line-height: 1.3;">إدارة
                             الأسعار<br>والمخازن</span>
                     </div>
                     <div class="dm-mid-tile blue" onclick="switchSection('settings')" data-perm="general_settings">
-                        <span class="icon">📝</span>
+                        <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></span>
                         <span class="label" data-i18n="sidebar_settings" data-i18n="app_settings">الإعدادات</span>
                     </div>
 
@@ -746,62 +805,67 @@
             <div class="dm-section-title" style="padding-right: 0; text-align: center; margin-right: 0;">حدد نوع المستند
             </div>
 
-
             <!-- الشبكة الكبيرة: العمليات الأساسية -->
             <div class="dm-main-grid">
                 <div class="dm-action-tile dm-btn-receipt" onclick="switchSection('receipt')" data-perm="docs_add">
-                    <span class="icon">💰</span>
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="12" y1="12" x2="12" y2="12.01"></line><path d="M2 10h20"></path></svg></span>
                     <span class="label" data-i18n="nav_receipt">قبض</span>
                 </div>
-                <div class="dm-action-tile dm-btn-sale" onclick="switchSection('sales')" data-perm="docs_add">
-                    <span class="icon">🛒</span>
-                    <span class="label" data-i18n="nav_sales">بيع</span>
+                <div class="dm-action-tile dm-btn-sale" onclick="switchSection('sales')" data-perm="docs_add" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; box-shadow: 0 8px 15px rgba(16, 185, 129, 0.3);">
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg></span>
+                    <span class="label" data-i18n="nav_sales" style="font-weight: 900; font-size: 1.1rem; text-shadow: 0 1px 3px rgba(0,0,0,0.3);">البيع</span>
                 </div>
                 <div class="dm-action-tile dm-btn-pay" onclick="switchSection('disbursement')" data-perm="docs_add">
-                    <span class="icon">💸</span>
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg></span>
                     <span class="label" data-i18n="nav_disbursement">صرف</span>
                 </div>
 
                 <div class="dm-action-tile dm-btn-rsell" onclick="switchSection('sales-return')" data-perm="docs_add">
-                    <span class="icon">🔄</span>
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg></span>
                     <span class="label" data-i18n="nav_return_sale">مرتجع بيع</span>
                 </div>
 
                 <div class="dm-action-tile dm-btn-rpur" onclick="switchSection('purchase-return')" data-perm="docs_add">
-                    <span class="icon">🔙</span>
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg></span>
                     <span class="label" data-i18n="nav_return_purchase">مرتجع شراء</span>
                 </div>
 
                 <div class="dm-action-tile dm-btn-pur" onclick="switchSection('purchase')" data-perm="docs_add">
-                    <span class="icon">🧺</span>
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg></span>
                     <span class="label" data-i18n="nav_purchases">شراء</span>
                 </div>
 
                 <div class="dm-action-tile dm-btn-adjust" onclick="switchSection('adjustment')" data-perm="stock_edit">
-                    <span class="icon">⚖️</span>
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg></span>
                     <span class="label" data-i18n="nav_adjust">تسوية مخزن</span>
                 </div>
 
                 <div class="dm-action-tile dm-btn-history" onclick="switchSection('history')" data-perm="docs_view">
-                    <span class="icon">📜</span>
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><circle cx="12" cy="14" r="3"></circle><polyline points="12 12 12 14 14 14"></polyline></svg></span>
                     <span class="label" data-i18n="nav_history">حركة صنف</span>
                 </div>
 
                 <div class="dm-action-tile" style="background:#5e3370; color:white; border: 1px solid #3e214a;"
                     onclick="switchSection('warehouse-report')" data-perm="stock_view">
-                    <span class="icon">🧱</span>
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg></span>
                     <span class="label">أرصدة المخازن</span>
                 </div>
 
+                <div class="dm-action-tile" style="background: linear-gradient(135deg, #1e293b, #0f172a); color:white; border: 1px solid #334155; box-shadow: 0 4px 10px rgba(0,0,0,0.2);"
+                    onclick="switchSection('statement')" data-perm="accounts_view">
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>
+                    <span class="label">كشف حساب</span>
+                </div>
+
                 <div class="dm-action-tile"
-                    style="background:#1a4d2e; color:white; border: 1px solid #0b2e13; margin-top: 30px;"
+                    style="background:#1a4d2e; color:white; border: 1px solid #0b2e13;"
                     onclick="openTransferModal()" data-perm="stock_transfer">
-                    <span class="icon">🚚</span>
+                    <span class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="2" ry="2"></rect><polyline points="16 8 20 8 23 11 23 16 16 16 16 8"></polyline><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg></span>
                     <span class="label">تحويل المخزون</span>
                 </div>
 
                 <div class="dm-action-tile"
-                    style="background: linear-gradient(135deg, #0f172a, #1e293b); border: 1px solid rgba(14, 165, 233, 0.4); grid-column: span 1; margin-top: 30px; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.3);"
+                    style="background: linear-gradient(135deg, #0f172a, #1e293b); border: 1px solid rgba(14, 165, 233, 0.4); grid-column: span 1; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.3);"
                     onclick="toggleCalculator()">
                     <div class="icon" style="margin-bottom: 5px;">
                         <svg width="45" height="45" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
@@ -823,9 +887,6 @@
                 </div>
             </div>
 
-            <!-- 🎨 Wallpaper Trigger Fixed (Always on top) -->
-            <div id="wallpaperTrigger" class="wallpaper-trigger" onclick="toggleWallpaperMenu()"
-                title="تخصيص مظهر البرنامج" style="z-index: 9999;">🎨</div>
         </div>
 
         <!-- ================= قسم المبيعات (Sales) ================= -->
@@ -1930,27 +1991,6 @@
                             <button class="pill-action-item" onclick="toggleShareMenu('receiptShareMenu', event)">
                                 <span class="icon">🔗</span> مشاركة
                             </button>
-                            <div id="receiptShareMenu" class="share-menu centered-modal">
-                                <button class="close-modal-btn"
-                                    onclick="toggleShareMenu('receiptShareMenu')">&times;</button>
-                                <div class="modal-title">📤 خيارات السند (قبض)</div>
-                                <div class="share-item" onclick="shareTransaction('receipt', 'wa')">
-                                    <span style="color:#25D366; font-size:1.4rem;">📱</span> واتساب
-                                </div>
-                                <div class="share-item" onclick="shareTransaction('receipt', 'tg')">
-                                    <span style="color:#0088cc; font-size:1.4rem;">✈️</span> تلجرام
-                                </div>
-                                <div class="share-item" onclick="exportCurrentBill('receipt', 'pdf')">
-                                    <span style="color:var(--box-red); font-size:1.4rem;">📕</span> تصدير PDF
-                                </div>
-                                <div class="share-item" onclick="exportCurrentBill('receipt', 'excel')">
-                                    <span style="color:#217346; font-size:1.4rem;">📊</span> Excel
-                                </div>
-                                <div class="share-item" onclick="printReceiptData()"
-                                    style="grid-column: span 2; border-top: 1px solid var(--border-color); margin-top: 5px; flex-direction:row; padding-top: 15px;">
-                                    <span style="color:#34495e; font-size:1.4rem;">🖨️</span> طباعة السند
-                                </div>
-                            </div>
                         </div>
                         <button class="pill-action-item" onclick="resetReceipt()">
                             <span class="icon">📄</span> جديد
@@ -2128,27 +2168,6 @@
                             <button class="pill-action-item" onclick="toggleShareMenu('disburseShareMenu', event)">
                                 <span class="icon">🔗</span> مشاركة
                             </button>
-                            <div id="disburseShareMenu" class="share-menu centered-modal">
-                                <button class="close-modal-btn"
-                                    onclick="toggleShareMenu('disburseShareMenu')">&times;</button>
-                                <div class="modal-title">📤 خيارات السند (صرف)</div>
-                                <div class="share-item" onclick="shareTransaction('disbursement', 'wa')">
-                                    <span style="color:#25D366; font-size:1.4rem;">📱</span> واتساب
-                                </div>
-                                <div class="share-item" onclick="shareTransaction('disbursement', 'tg')">
-                                    <span style="color:#0088cc; font-size:1.4rem;">✈️</span> تلجرام
-                                </div>
-                                <div class="share-item" onclick="exportCurrentBill('disbursement', 'pdf')">
-                                    <span style="color:var(--box-red); font-size:1.4rem;">📕</span> تصدير PDF
-                                </div>
-                                <div class="share-item" onclick="exportCurrentBill('disbursement', 'excel')">
-                                    <span style="color:#217346; font-size:1.4rem;">📊</span> Excel
-                                </div>
-                                <div class="share-item" onclick="printDisbursementData()"
-                                    style="grid-column: span 2; border-top: 1px solid var(--border-color); margin-top: 5px; flex-direction:row; padding-top: 15px;">
-                                    <span style="color:#34495e; font-size:1.4rem;">🖨️</span> طباعة السند
-                                </div>
-                            </div>
                         </div>
                         <button class="pill-action-item" onclick="resetDisbursement()">
                             <span class="icon">📄</span> جديد
@@ -2375,7 +2394,7 @@
                 </div>
 
                 <!-- 4. الكمية -->
-                <div class="header-column" style="width: 60px;">
+                <div class="header-column" style="width: 110px;">
                     <div class="header-label-badge"
                         style="background: rgba(59, 130, 246, 0.1); color: #94a3b8; border-color: #3b82f6;">🔢 كمية
                     </div>
@@ -2387,7 +2406,7 @@
                 </div>
 
                 <!-- 5. التكلفة -->
-                <div class="header-column" style="width: 75px;">
+                <div class="header-column" style="width: 120px;">
                     <div class="header-label-badge"
                         style="background: rgba(34, 197, 94, 0.1); color: #94a3b8; border-color: var(--primary-color);">
                         💰 تكلفة</div>
@@ -2588,27 +2607,6 @@
                         <span>📤 مشاركة</span>
                         <span class="shortcut">الخيارات</span>
                     </button>
-                    <div id="purchaseInvoiceShareMenu" class="share-menu centered-modal">
-                        <button class="close-modal-btn"
-                            onclick="toggleShareMenu('purchaseInvoiceShareMenu')">&times;</button>
-                        <div class="modal-title">📤 خيارات الفاتورة</div>
-                        <div class="share-item" onclick="shareTransaction('purchase', 'wa')">
-                            <span style="color:#25D366; font-size:1.4rem;">📱</span> واتساب
-                        </div>
-                        <div class="share-item" onclick="shareTransaction('purchase', 'tg')">
-                            <span style="color:#0088cc; font-size:1.4rem;">✈️</span> تلجرام
-                        </div>
-                        <div class="share-item" onclick="exportCurrentBill('purchase', 'excel')">
-                            <span style="color:#217346; font-size:1.4rem;">📊</span> إكسل (Excel)
-                        </div>
-                        <div class="share-item" onclick="exportCurrentBill('purchase', 'pdf')">
-                            <span style="color:var(--box-red); font-size:1.4rem;">📕</span> تصدير PDF
-                        </div>
-                        <div class="share-item" onclick="printPurchaseBill()"
-                            style="grid-column: span 2; border-top: 1px solid var(--border-color); margin-top: 5px; flex-direction:row; padding-top: 15px;">
-                            <span style="color:#34495e; font-size:1.4rem;">🖨️</span> طباعة الفاتورة
-                        </div>
-                    </div>
                 </div>
 
                 <button class="action-btn btn-print" onclick="printPurchaseBill()"><span>🖨️ طباعة</span><span
@@ -2714,16 +2712,6 @@
                         <button class="an-btn-share" style="padding: 0 16px; height: 36px; background: linear-gradient(135deg, #64748b, #475569) !important; color: white !important; border: none !important; border-radius: 8px !important; font-weight: bold !important; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(100, 116, 139, 0.15); font-size: 0.85rem;" onclick="toggleShareMenu('analysisShareMenu', event)">
                             <span>📤</span> مشاركة
                         </button>
-                        <div id="analysisShareMenu" class="share-menu centered-modal"
-                            style="position: fixed !important; top: 10% !important; left: 50% !important; transform: translate(-50%, 0) !important; z-index: 999999 !important; background: white; border-radius: 15px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); width: 300px; padding: 15px;">
-                            <button class="close-modal-btn"
-                                onclick="toggleShareMenu('analysisShareMenu')">&times;</button>
-                            <div class="modal-title">📊 خيارات مشاركة التحليل</div>
-                            <div class="share-item" onclick="shareAnalysisReport('whatsapp')">📱 واتساب</div>
-                            <div class="share-item" onclick="shareAnalysisReport('telegram')">✈️ تلجرام</div>
-                            <div class="share-item" onclick="exportAnalysisToExcel()">📊 Excel</div>
-                            <div class="share-item" onclick="printAnalysisReport()">🖨️ طباعة</div>
-                        </div>
                     </div>
                     <button class="an-btn-detailed" style="padding: 0 16px; height: 36px; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color: white !important; border: none !important; border-radius: 8px !important; font-weight: bold !important; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.15); font-size: 0.85rem;" onclick="viewSelectedAnalysisInvoice()">
                         <span>📄</span> عرض الفاتورة
@@ -3503,6 +3491,12 @@
             <!-- 4. شريط الإجراءات والتحكم (Action Sidebar) -->
             <div class="inv-sidebar"
                 style="background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(15px); padding: 15px; border-radius: 20px; border: 1.5px solid rgba(197, 160, 89, 0.3); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                
+                <button class="v-btn" onclick="switchSection('dashboard')"
+                    style="background:var(--main-blue); color:white; border:none; box-shadow:0 4px 15px rgba(0,0,0,0.2); margin-bottom: 15px; width: 100%;">
+                    <span>↩️ العودة للرئيسية</span>
+                </button>
+
                 <button class="btn-add-item" onclick="openNewItemModal()"
                     style="height: 60px; font-size: 1.1rem; font-weight: 900; background: #2e7d32 !important; color: white; border: none; box-shadow: 0 4px 20px rgba(46, 125, 50, 0.4);">
                     <span>➕ إضافة صنف</span>
@@ -3534,13 +3528,6 @@
                 </div>
                 <input type="file" id="excelImportInput" accept=".xlsx, .xls, .csv" style="display:none;"
                     onchange="importProductsFromExcel(event)">
-
-                <hr style="border: 0; border-top: 1px dashed rgba(201,168,76,0.3); width: 100%; margin: 10px 0;">
-
-                <button class="v-btn" onclick="switchSection('dashboard')"
-                    style="background:var(--main-blue); color:white; border:none; box-shadow:0 -4px 15px rgba(0,0,0,0.2); position: sticky; bottom: 0; z-index: 10; margin-top: auto;">
-                    <span>↩️ العودة للرئيسية</span>
-                </button>
 
             </div>
 
@@ -4044,6 +4031,13 @@
 
             <!-- 1. شريط الإجراءات الجانبي (Accounts Sidebar) -->
             <div class="acc-glass-sidebar">
+                <button class="acc-premium-btn acc-btn-back" onclick="switchSection('dashboard')">
+                    <span class="btn-icon">↩️</span>
+                    <span>العودة للرئيسية</span>
+                </button>
+
+                <hr class="acc-sidebar-sep">
+
                 <button class="acc-premium-btn acc-btn-add" onclick="openNewAccountModal()">
                     <span class="btn-icon">➕</span>
                     <span>إضافة حساب جديد</span>
@@ -4091,13 +4085,6 @@
                     style="background: linear-gradient(135deg, #1d6f42, #2e7d32); color: white; border: none; margin-top: 5px;">
                     <span class="btn-icon">📊</span>
                     <span>تصدير القائمة (Excel)</span>
-                </button>
-
-                <hr class="acc-sidebar-sep">
-
-                <button class="acc-premium-btn acc-btn-back" onclick="switchSection('dashboard')">
-                    <span class="btn-icon">↩️</span>
-                    <span>العودة للرئيسية</span>
                 </button>
             </div>
 
@@ -6753,10 +6740,10 @@
                     <div
                         style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
                         <img src="media/bayan_logo.png"
-                            style="width: 160px; height: auto; border-radius: 12px; border: 2px solid #d4af37; box-shadow: 0 8px 20px rgba(0,0,0,0.5), 0 0 15px rgba(212, 175, 55, 0.2);"
+                            style="width: 140px; height: auto; border-radius: 12px; border: 2px solid #d4af37; box-shadow: 0 8px 20px rgba(0,0,0,0.5), 0 0 15px rgba(212, 175, 55, 0.2);"
                             alt="Bayan POS Logo">
                         <h1
-                            style="color: #fff; font-size: 1.5rem; letter-spacing: 2px; margin-top: 5px; font-weight: 900; background: linear-gradient(to right, #fde68a, #d4af37); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">
+                            style="color: #fff; font-size: 1.4rem; letter-spacing: 2px; margin-top: 5px; font-weight: 900; background: linear-gradient(to right, #fde68a, #d4af37); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">
                             تسجيل الدخول</h1>
                     </div>
                 </div>
@@ -6832,6 +6819,10 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Time and Date for Login Screen -->
+        <div style="position: absolute; bottom: 30px; left: 40px; color: #fff; font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 5px rgba(0,0,0,0.5);" id="loginTime"></div>
+        <div style="position: absolute; bottom: 30px; right: 40px; color: #fff; font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 5px rgba(0,0,0,0.5);" id="loginDate"></div>
     </div>
 
     <!-- نافذة نجاح التثبيت وعرض بيانات الدخول (Setup Success Modal) -->
@@ -7271,37 +7262,67 @@
     </div>
 
     <!-- نافذة كشف الحساب (Account Statement Modal) -->
-    <div id="statementModal" class="modal-overlay hidden">
-        <div class="account-modal-content" style="max-width: 900px; height: 85vh;">
-            <div class="account-modal-header">
-                <h2>📄 كشف حساب تفصيلي</h2>
-                <button class="close-modal-btn"
-                    onclick="document.getElementById('statementModal').classList.add('hidden')">×</button>
+    <style>
+        .stmt-split-layout { display: flex; gap: 20px; height: calc(100vh - 180px); flex-direction: row-reverse; } /* row-reverse for RTL so sidebar is on left */
+        .stmt-sidebar { width: 260px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; overflow-x: hidden; padding-left: 5px; }
+        .stmt-main-content { flex: 1; display: flex; flex-direction: column; gap: 15px; overflow: hidden; }
+        .stmt-table-wrapper { flex: 1; overflow: auto; border: 1px solid #e2e8f0; border-radius: 12px; background: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .stmt-balance-box { background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 25px 20px; border-radius: 16px; text-align: center; box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4); transition: all 0.3s; }
+        .stmt-balance-box.debt { background: linear-gradient(135deg, #ef4444, #dc2626); box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.4); }
+        .stmt-action-btn { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; font-weight: 900; color: #334155; cursor: pointer; transition: 0.2s; font-family: 'Cairo', sans-serif; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .stmt-action-btn:hover:not(:disabled) { background: #f8fafc; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .stmt-action-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #f1f5f9; color: #94a3b8; }
+        .stmt-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .stmt-table th { position: sticky; top: 0; background: #f1f5f9; padding: 12px; color: #475569; font-weight: 900; text-align: center; border-bottom: 2px solid #e2e8f0; z-index: 10; white-space: nowrap; }
+        .stmt-table td { padding: 10px; text-align: center; border-bottom: 1px solid #f1f5f9; color: #1e293b; font-weight: bold; }
+        .stmt-table tbody tr { cursor: pointer; transition: background 0.2s; }
+        .stmt-table tbody tr:hover { background: #f8fafc; }
+        .stmt-table tbody tr.active-row { background: #eff6ff !important; border-right: 4px solid #3b82f6; }
+        
+        .stmt-filter-bar { display:flex; gap:12px; align-items:center; background:#fff; padding:10px 15px; border-radius:12px; border:1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0,0,0,0.02); flex-wrap: wrap; margin-bottom: 15px; }
+        .stmt-filter-input { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: 'Cairo', sans-serif; font-weight: bold; color: #334155; outline: none; transition: border-color 0.2s; }
+        .stmt-filter-input:focus { border-color: #3b82f6; }
+    </style>
+    <div id="statement-section" class="section-view inventory-theme hidden">
+        <div class="inv-container" style="width: 100%; height: 100%; display: flex; flex-direction: column;">
+            
+            <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; color: white; border-radius: 12px 12px 0 0; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <h2 style="margin: 0; font-size: 1.3rem; font-weight: 900; display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.5rem; color: #fff;">📄</span> كشف حساب تفصيلي
+                    </h2>
+                    <!-- Account Selector -->
+                    <div style="position: relative; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.2);">
+                        <label style="font-weight: bold; font-size: 1rem;">الحساب:</label>
+                        <input type="text" id="stmtAccountSelector" placeholder="ابحث عن حساب..." style="padding: 4px 10px; border-radius: 8px; border: none; outline: none; font-family: 'Cairo', sans-serif; font-weight: bold; width: 220px; color: black;" onkeyup="filterStmtAccounts()" onfocus="filterStmtAccounts()">
+                        <div id="stmtAccountDropdown" style="display: none; position: absolute; top: 100%; right: 0; width: 100%; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); z-index: 1000; margin-top: 5px;"></div>
+                    </div>
+                    <div id="statementHeaderAccName" style="background: rgba(255,255,255,0.1); padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 1.1rem; border: 1px solid rgba(255,255,255,0.2); display:none;">اسم الحساب</div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="switchSection('dashboard')" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: white; padding: 6px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                        ↩️ العودة للشاشة الرئيسية
+                    </button>
+                    <button onclick="closeTab('statement')" style="background: rgba(239, 68, 68, 0.8); border: 1px solid rgba(255,255,255,0.25); color: white; padding: 6px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='rgba(239, 68, 68, 1)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.8)'">
+                        ❌ إغلاق القسم
+                    </button>
+                </div>
             </div>
-            <div class="account-body">
-                <!-- فلترة التاريخ لكشف الحساب -->
-                <div
-                    style="display:flex; gap:10px; margin-bottom:15px; align-items:center; background:#f9f9f9; padding:10px; border-radius:5px; border:1px solid #eee; flex-wrap: wrap;">
-                    <select class="search-input"
-                        style="width:auto; padding:5px; background: #fffde7; border-color: var(--gold);"
-                        onchange="applyQuickDateFilter(this.value, 'stmtDateFrom', 'stmtDateTo')">
+
+            <div style="padding: 20px; flex: 1; display: flex; flex-direction: column; background: #f8fafc; overflow: hidden; border-radius: 0 0 12px 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+                <!-- شريط الفلاتر -->
+                <div class="stmt-filter-bar">
+                    <select class="stmt-filter-input" style="background: #fffde7; border-color: var(--gold);" onchange="applyQuickDateFilter(this.value, 'stmtDateFrom', 'stmtDateTo'); generateAccountStatement();">
                         <option value="">📅 المدة الزمنية...</option>
                         <option value="today">اليوم</option>
                         <option value="yesterday">الأمس</option>
-                        <option value="thisWeek">الأسبوع الحالي</option>
-                        <option value="lastWeek">الأسبوع السابق</option>
-                        <option value="thisMonth">الشهر الحالي</option>
+                        <option value="thisMonth" selected>الشهر الحالي</option>
                         <option value="lastMonth">الشهر السابق</option>
                         <option value="thisYear">العام الحالي</option>
-                        <option value="lastYear">العام السابق</option>
                     </select>
-                    <label>من تاريخ:</label> <input type="date" id="stmtDateFrom" class="search-input"
-                        style="width:auto; padding:5px;">
-                    <label>إلى تاريخ:</label> <input type="date" id="stmtDateTo" class="search-input"
-                        style="width:auto; padding:5px;">
-                    <select id="stmtTypeFilter" class="search-input"
-                        style="width:auto; padding:5px; background: #e8f5e9; border-color: var(--main-green);"
-                        onchange="generateAccountStatement()">
+                    <label style="font-weight:bold; color:#475569;">من:</label> <input type="date" id="stmtDateFrom" class="stmt-filter-input" onchange="generateAccountStatement()">
+                    <label style="font-weight:bold; color:#475569;">إلى:</label> <input type="date" id="stmtDateTo" class="stmt-filter-input" onchange="generateAccountStatement()">
+                    <select id="stmtTypeFilter" class="stmt-filter-input" style="background: #e8f5e9; border-color: var(--main-green);" onchange="generateAccountStatement()">
                         <option value="all">📁 كافة الحركات</option>
                         <option value="sales">🛒 المبيعات</option>
                         <option value="purchase">🚐 المشتريات</option>
@@ -7309,42 +7330,90 @@
                         <option value="disbursement">💸 المدفوعات</option>
                         <option value="returns">↩️ المرتجعات</option>
                     </select>
-                    <button class="acc-btn"
-                        style="padding:5px 15px; font-size:0.9rem; background:var(--main-blue); color:white;"
-                        onclick="generateAccountStatement()">عرض الكشف 🔎</button>
-                    <button class="acc-btn"
-                        style="padding:5px 15px; font-size:0.9rem; background:var(--main-purple); color:white; font-weight:900;"
-                        onclick="toggleShareMenu('stmtShareMenu', event)">🔗 مشاركة الكشف</button>
-                    <button class="acc-btn"
-                        style="padding:5px 10px; font-size:0.8rem; background:#eee; color:#333; border:1px solid #ccc;"
-                        onclick="showStatementColumnCustomizer()">⚙️ تخصيص الأعمدة</button>
+                    <button style="padding: 8px 25px; font-size: 1rem; font-weight: 900; background: #eab308; color: #422006; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 10px rgba(234, 179, 8, 0.3); transition: 0.2s;" onclick="generateAccountStatement()" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">عرض التقرير 🔎</button>
+                    
+                    <div style="flex:1;"></div>
+                    
+                    <button style="padding: 8px 15px; font-size: 0.9rem; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 5px;" onclick="toggleShareMenu('stmtShareMenu', event)">🔗 مشاركة</button>
                 </div>
 
-                <div id="statementHeaderInfo"
-                    style="margin-bottom: 20px; padding: 15px; background: #fff; border-radius: 8px; border: 1px solid #ddd;">
+                <!-- الهيكل الرئيسي -->
+                <div class="stmt-split-layout">
+                    <!-- اللوحة الجانبية -->
+                    <div class="stmt-sidebar">
+                        <div id="stmtBalanceBox" class="stmt-balance-box">
+                            <div style="font-size: 0.9rem; font-weight: bold; opacity: 0.9; margin-bottom: 5px;">رصيد الحساب</div>
+                            <div id="stmtFinalBalance" style="font-size: 2.2rem; font-weight: 900; letter-spacing: 1px;">0.00</div>
+                        </div>
+                        
+                        <div style="flex:1;"></div>
+
+                        <button class="stmt-action-btn" onclick="printStatement()">
+                            <span>طباعة التقرير</span>
+                            <span style="font-size: 1.2rem;">🖨️</span>
+                        </button>
+                        
+                        <button id="stmtActionPrintDoc" class="stmt-action-btn" disabled onclick="handleStmtAction('print')">
+                            <span>طباعة المستند</span>
+                            <span style="font-size: 1.2rem;">🖨️</span>
+                        </button>
+                        
+                        <button id="stmtActionEdit" class="stmt-action-btn" disabled style="color: #d97706;" onclick="handleStmtAction('edit')">
+                            <span>تعديل الفاتورة</span>
+                            <span style="font-size: 1.2rem;">📝</span>
+                        </button>
+                        
+                        <button id="stmtActionDelete" class="stmt-action-btn" disabled style="color: #dc2626;" onclick="handleStmtAction('delete')">
+                            <span>حذف الفاتورة</span>
+                            <span style="font-size: 1.2rem;">❌</span>
+                        </button>
+                    </div>
+
+                    <!-- منطقة الجداول -->
+                    <div class="stmt-main-content">
+                        <!-- الجدول العلوي (الحركات) -->
+                        <div class="stmt-table-wrapper">
+                            <table class="stmt-table" id="stmtMasterTable">
+                                <thead>
+                                    <tr>
+                                        <th>التاريخ</th>
+                                        <th>الوقت</th>
+                                        <th>الحركة</th>
+                                        <th>عليه (مدين)</th>
+                                        <th>له (دائن)</th>
+                                        <th>الرصيد</th>
+                                        <th>رقم الحركة</th>
+                                        <th>طريقة السداد</th>
+                                        <th>المخزن</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="statementTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- الجدول السفلي (تفاصيل الأصناف) -->
+                        <div class="stmt-table-wrapper" style="border-top: 3px solid #e2e8f0; background: #fff;">
+                            <table class="stmt-table" id="stmtDetailTable">
+                                <thead>
+                                    <tr>
+                                        <th>رقم الصنف</th>
+                                        <th>اسم الصنف</th>
+                                        <th>وحدة</th>
+                                        <th>كمية</th>
+                                        <th>السعر</th>
+                                        <th>الخصم</th>
+                                        <th>الإجمالي النهائي</th>
+                                        <th>التصنيف</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="statementDetailsBody">
+                                    <tr><td colspan="8" style="padding: 40px; color: #94a3b8; font-size: 1.1rem; text-align: center;">اضغط على إحدى الحركات بالأعلى لعرض تفاصيلها هنا</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
-                <div class="table-container">
-                    <table class="invoice-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 40px; display: none;" class="col-stmt-select">تحديد</th>
-                                <th>التاريخ</th>
-                                <th>نوع الحركة</th>
-                                <th>البيان</th>
-                                <th>مدين (عليه)</th>
-                                <th>دائن (له)</th>
-                                <th>الرصيد</th>
-                            </tr>
-                        </thead>
-                        <tbody id="statementTableBody"></tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="account-footer">
-                <button class="acc-btn" style="background: #f39c12; color: #2c3e50;" onclick="printStatement()">طباعة
-                    التقرير 🖨️</button>
-                <button class="acc-btn" style="background: #c0392b; color: white;"
-                    onclick="document.getElementById('statementModal').classList.add('hidden')">إغلاق</button>
             </div>
         </div>
     </div>
@@ -8160,6 +8229,19 @@
         </div>
     </div>
 
+    <!-- نافذة مدخلات مخصصة (Custom Prompt Modal) -->
+    <div id="customPromptModal" class="confirm-modal-overlay hidden" style="backdrop-filter: blur(10px); z-index: 999999;">
+        <div class="alert-card" style="position:relative; background: white; padding: 25px; border-radius: 15px; width: 400px; max-width: 90%; text-align: center;">
+            <div class="alert-icon" style="font-size: 2.5rem; margin-bottom: 15px;">❓</div>
+            <h3 id="customPromptTitle" class="alert-title" style="margin-top: 0; font-size: 1.2rem; color: #2c3e50; font-weight: 800; direction: rtl;">تنبيه</h3>
+            <input type="text" id="customPromptInput" class="header-input-unified" style="width: 100%; margin: 15px 0; border: 2.5px solid var(--accent-gold); padding: 8px 12px; border-radius: 8px; font-size: 1rem; text-align: center; box-sizing: border-box; font-weight: bold; color: black; background: white;" placeholder="...">
+            <div class="alert-footer" style="display: flex; gap: 10px; justify-content: center; margin-top: 15px; direction: rtl;">
+                <button id="customPromptConfirmBtn" class="alert-btn-main" style="background: var(--main-green); color: white; border: none; padding: 8px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; min-width: 100px;">تأكيد</button>
+                <button id="customPromptCancelBtn" class="alert-btn-secondary" style="background: #e2e8f0; color: #475569; border: none; padding: 8px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; min-width: 100px;">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
     <!-- نافذة تأكيد الإغلاق (Unsaved Data Modal) -->
     <div id="confirmModal" class="confirm-modal-overlay hidden">
         <div class="confirm-modal-box">
@@ -8197,7 +8279,7 @@
                             style="font-family: monospace; user-select: all;">جاري التحميل...</span>
                     </div>
                     <p style="margin-top: 10px;">حالة الترخيص الحالية: <b id="currentPlanText"
-                            style="color: var(--accent-gold);">باقة نسخة المجانية</b></p>
+                            style="color: #22c55e;">باقة نسخة المجانية</b></p>
                 </div>
 
                 <div class="sub-plans" style="padding-top: 30px;">
@@ -8644,7 +8726,7 @@
                             التحويل المستخدم:</span>
                         <input type="text" id="modalSubTransferPhone" placeholder="أدخل الرقم الذي حولت منه..."
                             style="width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; font-size: 0.9rem; font-weight: bold; text-align: center; outline: none;"
-                            onchange="localStorage.setItem('bayan_sub_transfer_phone', this.value)">
+                            onchange="setStore('bayan_sub_transfer_phone', this.value)">
                     </div>
                 </div>
             </div>
@@ -8954,75 +9036,36 @@
                     onchange="uploadCustomWallpaper(event)">
             </div>
         </div>
-        <!-- 🏆 الفخامة والذهب -->
-        <div class="wp-section-title">✨ باقة الفخامة الساحرة (Luxury Edition)</div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px;">
-            <div class="wp-item-card"
-                onclick="changeWallpaper('linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 40%, #2c2415 70%, #0d0d0d 100%)')"
-                style="background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 40%, #2c2415 70%, #0d0d0d 100%);">
-                <div class="wp-label">رخام أسود مذهب</div>
-            </div>
-            <div class="wp-item-card"
-                onclick="changeWallpaper('linear-gradient(135deg, #1b1912 0%, #3a321a 50%, #1b1912 100%)')"
-                style="background: linear-gradient(135deg, #1b1912 0%, #3a321a 50%, #1b1912 100%);">
-                <div class="wp-label">رخام ذهبي راقي</div>
-            </div>
-            <div class="wp-item-card"
-                onclick="changeWallpaper('linear-gradient(135deg, #1f1b0f 0%, #4a3e20 50%, #1f1b0f 100%)')"
-                style="background: linear-gradient(135deg, #1f1b0f 0%, #4a3e20 50%, #1f1b0f 100%);">
-                <div class="wp-label">ذهب سائل</div>
-            </div>
-            <div class="wp-item-card" onclick="changeWallpaper('radial-gradient(circle, #2d2415 0%, #0d0c0a 100%)')"
-                style="background: radial-gradient(circle, #2d2415 0%, #0d0c0a 100%);">
-                <div class="wp-label">بقع ذهب مجردة</div>
-            </div>
-        </div>
+        
+        <!-- 🖼️ خلفيات مخصصة (Custom Backgrounds) -->
+        <div id="customWallpapersGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; margin-top: 20px;"></div>
 
-        <!-- 🌲 الطبيعة والهدوء -->
-        <div class="wp-section-title">🌿 سحر الطبيعة (Nature Escape)</div>
+        <!-- 🖼️ خلفيات مميزة (Premium Backgrounds) -->
+        <div class="wp-section-title" style="margin-top: 20px;">🏙️ خلفيات مميزة (Premium Backgrounds)</div>
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px;">
-            <div class="wp-item-card"
-                onclick="changeWallpaper('linear-gradient(135deg, #1f1015 0%, #3b1820 50%, #11080d 100%)')"
-                style="background: linear-gradient(135deg, #1f1015 0%, #3b1820 50%, #11080d 100%);">
-                <div class="wp-label">غروب الخريف</div>
+            <div class="wp-item-card" onclick="changeWallpaper('media/wallpapers/burj.jpg')"
+                style="background: url('media/wallpapers/burj.jpg') center/cover;">
+                <div class="wp-label" style="background: rgba(0,0,0,0.6);">برج خليفة (دبي)</div>
             </div>
-            <div class="wp-item-card"
-                onclick="changeWallpaper('linear-gradient(135deg, #051d14 0%, #0c3826 50%, #051d14 100%)')"
-                style="background: linear-gradient(135deg, #051d14 0%, #0c3826 50%, #051d14 100%);">
-                <div class="wp-label">عبق الغابة</div>
+            <div class="wp-item-card" onclick="changeWallpaper('media/wallpapers/night.jpg')"
+                style="background: url('media/wallpapers/night.jpg') center/cover;">
+                <div class="wp-label" style="background: rgba(0,0,0,0.6);">مدينة ليلية</div>
             </div>
-            <div class="wp-item-card"
-                onclick="changeWallpaper('linear-gradient(135deg, #0a192f 0%, #0f3057 50%, #000814 100%)')"
-                style="background: linear-gradient(135deg, #0a192f 0%, #0f3057 50%, #000814 100%);">
-                <div class="wp-label">جبال الألب</div>
+            <div class="wp-item-card" onclick="changeWallpaper('media/wallpapers/mountains.jpg')"
+                style="background: url('media/wallpapers/mountains.jpg') center/cover;">
+                <div class="wp-label" style="background: rgba(0,0,0,0.6);">طبيعة جبلية</div>
             </div>
-            <div class="wp-item-card"
-                onclick="changeWallpaper('linear-gradient(135deg, #04121f 0%, #0c2d48 50%, #020b14 100%)')"
-                style="background: linear-gradient(135deg, #04121f 0%, #0c2d48 50%, #020b14 100%);">
-                <div class="wp-label">البحيرة الزرقاء</div>
+            <div class="wp-item-card" onclick="changeWallpaper('media/wallpapers/office.jpg')"
+                style="background: url('media/wallpapers/office.jpg') center/cover;">
+                <div class="wp-label" style="background: rgba(0,0,0,0.6);">مكتب فاخر</div>
             </div>
-        </div>
-
-        <!-- 🌌 الفضاء والظلام -->
-        <div class="wp-section-title">🌑 الوضع الليلي والعميق (Dark Obsidian)</div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px;">
-            <div class="wp-item-card" onclick="changeWallpaper('linear-gradient(135deg, #121212 0%, #242424 100%)')"
-                style="background: linear-gradient(135deg, #121212 0%, #242424 100%);">
-                <div class="wp-label">أسود أسمنتي</div>
+            <div class="wp-item-card" onclick="changeWallpaper('media/wallpapers/relax.jpg')"
+                style="background: url('media/wallpapers/relax.jpg') center/cover;">
+                <div class="wp-label" style="background: rgba(0,0,0,0.6);">هدوء وإسترخاء</div>
             </div>
-            <div class="wp-item-card"
-                onclick="changeWallpaper('linear-gradient(135deg, #000814 0%, #001d3d 50%, #000814 100%)')"
-                style="background: linear-gradient(135deg, #000814 0%, #001d3d 50%, #000814 100%);">
-                <div class="wp-label">شبكة تقنية</div>
-            </div>
-            <div class="wp-item-card" onclick="changeWallpaper('radial-gradient(circle, #16161a 0%, #0b0b0d 100%)')"
-                style="background: radial-gradient(circle, #16161a 0%, #0b0b0d 100%);">
-                <div class="wp-label">ظلام دامس</div>
-            </div>
-            <div class="wp-item-card"
-                onclick="changeWallpaper('linear-gradient(135deg, #12001c 0%, #27003b 50%, #12001c 100%)')"
-                style="background: linear-gradient(135deg, #12001c 0%, #27003b 50%, #12001c 100%);">
-                <div class="wp-label">أضواء كوكبية</div>
+            <div class="wp-item-card" onclick="changeWallpaper('media/wallpapers/beach.jpg')"
+                style="background: url('media/wallpapers/beach.jpg') center/cover;">
+                <div class="wp-label" style="background: rgba(0,0,0,0.6);">شاطئ البحر</div>
             </div>
         </div>
     </div>
@@ -9363,7 +9406,115 @@
     </style>
 
     <!-- قوائم المشاركة المركزية (Moved to body end for perfect centering) -->
-    <div id="salesInvoiceShareMenu" class="share-menu">
+    <div id="receiptShareMenu" class="share-menu centered-modal">
+        <button class="close-modal-btn"
+            onclick="toggleShareMenu('receiptShareMenu')">&times;</button>
+        <div class="modal-title">📤 خيارات السند (قبض)</div>
+        <div class="share-item" onclick="shareTransaction('receipt', 'wa')">
+            <span style="color:#25D366; font-size:1.4rem;">📱</span> واتساب
+        </div>
+        <div class="share-item" onclick="shareTransaction('receipt', 'tg')">
+            <span style="color:#0088cc; font-size:1.4rem;">✈️</span> تلجرام
+        </div>
+        <div class="share-item" onclick="exportCurrentBill('receipt', 'pdf')">
+            <span style="color:var(--box-red); font-size:1.4rem;">📕</span> تصدير PDF
+        </div>
+        <div class="share-item" onclick="exportCurrentBill('receipt', 'excel')">
+            <span style="color:#217346; font-size:1.4rem;">📊</span> Excel
+        </div>
+        <div class="share-item" onclick="printReceiptData()"
+            style="grid-column: span 2; border-top: 1px solid var(--border-color); margin-top: 5px; flex-direction:row; padding-top: 15px;">
+            <span style="color:#34495e; font-size:1.4rem;">🖨️</span> طباعة السند
+        </div>
+    </div>
+
+    <div id="disburseShareMenu" class="share-menu centered-modal">
+        <button class="close-modal-btn"
+            onclick="toggleShareMenu('disburseShareMenu')">&times;</button>
+        <div class="modal-title">📤 خيارات السند (صرف)</div>
+        <div class="share-item" onclick="shareTransaction('disbursement', 'wa')">
+            <span style="color:#25D366; font-size:1.4rem;">📱</span> واتساب
+        </div>
+        <div class="share-item" onclick="shareTransaction('disbursement', 'tg')">
+            <span style="color:#0088cc; font-size:1.4rem;">✈️</span> تلجرام
+        </div>
+        <div class="share-item" onclick="exportCurrentBill('disbursement', 'pdf')">
+            <span style="color:var(--box-red); font-size:1.4rem;">📕</span> تصدير PDF
+        </div>
+        <div class="share-item" onclick="exportCurrentBill('disbursement', 'excel')">
+            <span style="color:#217346; font-size:1.4rem;">📊</span> Excel
+        </div>
+        <div class="share-item" onclick="printDisbursementData()"
+            style="grid-column: span 2; border-top: 1px solid var(--border-color); margin-top: 5px; flex-direction:row; padding-top: 15px;">
+            <span style="color:#34495e; font-size:1.4rem;">🖨️</span> طباعة السند
+        </div>
+    </div>
+
+    <div id="reportShareMenu" class="share-menu centered-modal">
+        <button class="close-modal-btn"
+            onclick="toggleShareMenu('reportShareMenu')">&times;</button>
+        <div class="modal-title">📊 خيارات مشاركة التقرير</div>
+        <div class="share-item" onclick="shareTransaction('dailyReport', 'wa')">
+            <span style="color:#25D366; font-size:1.4rem;">📱</span> واتساب
+        </div>
+        <div class="share-item" onclick="shareTransaction('dailyReport', 'tg')">
+            <span style="color:#0088cc; font-size:1.4rem;">✈️</span> تلجرام
+        </div>
+        <div class="share-item" onclick="exportCurrentBill('dailyReport', 'excel')">
+            <span style="color:#217346; font-size:1.4rem;">📊</span> ملف إكسل
+        </div>
+        <div class="share-item" onclick="exportCurrentBill('dailyReport', 'pdf')">
+            <span style="color:var(--box-red); font-size:1.4rem;">📕</span> تصدير PDF
+        </div>
+        <div class="share-item" onclick="exportCurrentBill('dailyReport', 'image')">
+            <span style="color:#f39c12; font-size:1.4rem;">🖼️</span> صورة
+        </div>
+        <div class="share-item" onclick="printReportData()"
+            style="grid-column: span 2; border-top: 1px solid var(--border-color); margin-top: 5px; flex-direction:row; padding-top: 15px;">
+            <span style="color:#34495e; font-size:1.4rem;">🖨️</span> طباعة التقرير
+        </div>
+    </div>
+
+    <div id="analysisShareMenu" class="share-menu centered-modal">
+        <button class="close-modal-btn"
+            onclick="toggleShareMenu('analysisShareMenu')">&times;</button>
+        <div class="modal-title">📊 خيارات مشاركة التحليل</div>
+        <div class="share-item" onclick="shareAnalysisReport('whatsapp')">
+            <span style="color:#25D366; font-size:1.4rem;">📱</span> واتساب
+        </div>
+        <div class="share-item" onclick="shareAnalysisReport('telegram')">
+            <span style="color:#0088cc; font-size:1.4rem;">✈️</span> تلجرام
+        </div>
+        <div class="share-item" onclick="exportAnalysisToExcel()">
+            <span style="color:#217346; font-size:1.4rem;">📊</span> Excel
+        </div>
+        <div class="share-item" onclick="printAnalysisReport()">
+            <span style="color:#34495e; font-size:1.4rem;">🖨️</span> طباعة
+        </div>
+    </div>
+    <div id="purchaseInvoiceShareMenu" class="share-menu centered-popup">
+        <button class="close-modal-btn"
+            onclick="toggleShareMenu('purchaseInvoiceShareMenu')">&times;</button>
+        <div class="modal-title">📤 خيارات الفاتورة</div>
+        <div class="share-item" onclick="shareTransaction('purchase', 'wa')">
+            <span style="color:#25D366; font-size:1.4rem;">📱</span> واتساب
+        </div>
+        <div class="share-item" onclick="shareTransaction('purchase', 'tg')">
+            <span style="color:#0088cc; font-size:1.4rem;">✈️</span> تلجرام
+        </div>
+        <div class="share-item" onclick="exportCurrentBill('purchase', 'excel')">
+            <span style="color:#217346; font-size:1.4rem;">📊</span> إكسل (Excel)
+        </div>
+        <div class="share-item" onclick="exportCurrentBill('purchase', 'pdf')">
+            <span style="color:var(--box-red); font-size:1.4rem;">📕</span> تصدير PDF
+        </div>
+        <div class="share-item" onclick="printPurchaseBill()"
+            style="grid-column: span 2; border-top: 1px solid var(--border-color); margin-top: 5px; flex-direction:row; padding-top: 15px;">
+            <span style="color:#34495e; font-size:1.4rem;">🖨️</span> طباعة الفاتورة
+        </div>
+    </div>
+
+    <div id="salesInvoiceShareMenu" class="share-menu centered-popup">
         <button class="close-modal-btn" onclick="toggleShareMenu('salesInvoiceShareMenu')">&times;</button>
         <div class="modal-title">📤 خيارات الفاتورة</div>
         <div class="share-item" onclick="shareTransaction('sales', 'wa')"><span>📱</span> واتساب</div>
@@ -9375,7 +9526,7 @@
         </div>
     </div>
 
-    <div id="salesShareMenu" class="share-menu">
+    <div id="salesShareMenu" class="share-menu centered-popup">
         <button class="close-modal-btn" onclick="toggleShareMenu('salesShareMenu')">&times;</button>
         <div class="modal-title">📤 خيارات مرتجع المبيعات</div>
         <div class="share-item" onclick="shareTransaction('salesReturn', 'wa')"><span>📱</span> واتساب</div>
@@ -9387,7 +9538,7 @@
         </div>
     </div>
 
-    <div id="purShareMenu" class="share-menu">
+    <div id="purShareMenu" class="share-menu centered-popup">
         <button class="close-modal-btn" onclick="toggleShareMenu('purShareMenu')">&times;</button>
         <div class="modal-title">📤 خيارات مرتجع المشتريات</div>
         <div class="share-item" onclick="shareTransaction('purchaseReturn', 'wa')"><span>📱</span> واتساب</div>
@@ -9401,20 +9552,13 @@
     </div>
 
     <!-- شريط الخلفيات السريع (Bottom Left) -->
-    <div id="quickWpBar" class="quick-wp-bar hidden">
-        <div class="wp-swatch swatch-default" onclick="changeWallpaper('none')" title="الوضع الأصلي">🪟</div>
-        <div class="wp-swatch"
-            onclick="changeWallpaper('linear-gradient(135deg, #180029 0%, #300052 50%, #180029 100%)')"
-            style="background: linear-gradient(135deg, #180029, #300052);" title="بنفسجي ملكي"></div>
-        <div class="wp-swatch"
-            onclick="changeWallpaper('linear-gradient(135deg, #04121f 0%, #0c2d48 50%, #020b14 100%)')"
-            style="background: linear-gradient(135deg, #04121f, #0c2d48);" title="أزرق هادئ"></div>
-        <div class="wp-swatch" onclick="changeWallpaper('linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)')"
-            style="background: linear-gradient(135deg, #f8fafc, #e2e8f0); border: 1px solid #cbd5e1;"
-            title="رخام أبيض فاخر"></div>
-        <div class="wp-swatch"
-            onclick="changeWallpaper('linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 40%, #2c2415 70%, #0d0d0d 100%)')"
-            style="background: linear-gradient(135deg, #0d0d0d, #2c2415);" title="كربون غامق"></div>
+    <div id="quickWpBar" class="quick-wp-bar hidden" style="padding: 10px; border-radius: 30px; display: flex; gap: 8px; background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);">
+        <div class="wp-swatch swatch-default" onclick="changeWallpaper('none')" title="الوضع الأصلي" style="width: 35px; height: 35px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; background: rgba(0,0,0,0.5);">🪟</div>
+        <div class="wp-swatch" onclick="changeWallpaper('media/wallpapers/burj.jpg')" style="width: 35px; height: 35px; border-radius: 50%; background: url('media/wallpapers/burj.jpg') center/cover; cursor: pointer; border: 2px solid rgba(255,255,255,0.6); box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: 0.3s;" title="برج خليفة"></div>
+        <div class="wp-swatch" onclick="changeWallpaper('media/wallpapers/night.jpg')" style="width: 35px; height: 35px; border-radius: 50%; background: url('media/wallpapers/night.jpg') center/cover; cursor: pointer; border: 2px solid rgba(255,255,255,0.6); box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: 0.3s;" title="مدينة ليلية"></div>
+        <div class="wp-swatch" onclick="changeWallpaper('media/wallpapers/mountains.jpg')" style="width: 35px; height: 35px; border-radius: 50%; background: url('media/wallpapers/mountains.jpg') center/cover; cursor: pointer; border: 2px solid rgba(255,255,255,0.6); box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: 0.3s;" title="طبيعة جبلية"></div>
+        <div class="wp-swatch" onclick="changeWallpaper('media/wallpapers/office.jpg')" style="width: 35px; height: 35px; border-radius: 50%; background: url('media/wallpapers/office.jpg') center/cover; cursor: pointer; border: 2px solid rgba(255,255,255,0.6); box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: 0.3s;" title="مكتب فاخر"></div>
+        <div class="wp-swatch" onclick="changeWallpaper('media/wallpapers/relax.jpg')" style="width: 35px; height: 35px; border-radius: 50%; background: url('media/wallpapers/relax.jpg') center/cover; cursor: pointer; border: 2px solid rgba(255,255,255,0.6); box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: 0.3s;" title="استرخاء"></div>
     </div>
 
     <!-- الآلة الحاسبة الملكية (Royal Calculator Modal) -->
@@ -9430,6 +9574,8 @@
             <div style="display: flex; gap: 12px; align-items: center;">
                 <span onclick="minimizeCalculator()" style="cursor: pointer; font-size: 1.4rem; color: #94a3b8;"
                     title="تصغير">➖</span>
+                <span id="maximizeCalcBtn" onclick="toggleMaximizeCalculator()" style="cursor: pointer; font-size: 1.2rem; color: #10b981; font-weight: bold;"
+                    title="ملء الشاشة">🔲</span>
                 <span onclick="toggleCalculator()" style="cursor: pointer; font-size: 1.5rem; color: #f43f5e;"
                     title="إغلاق">&times;</span>
             </div>
