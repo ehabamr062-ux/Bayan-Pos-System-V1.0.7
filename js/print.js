@@ -18,9 +18,85 @@
 // ============================================================
 // الدالة الرئيسية للطباعة
 // ============================================================
+function escapePrintHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function generateOfflineInvoiceQR(text, size = 110) {
+    try {
+        if (typeof QRCode !== 'undefined' && text) {
+            const tempDiv = document.createElement('div');
+            tempDiv.style.display = 'none';
+            document.body.appendChild(tempDiv);
+            
+            // تنظيف النص وتأمينه لمنع أي تجاوز لحجم الـ QR Code
+            const cleanText = String(text).trim();
+            const safeText = cleanText.length > 250 ? cleanText.substring(0, 250) : cleanText;
+
+            const correctLvl = (typeof QRCode !== 'undefined' && QRCode.CorrectLevel && QRCode.CorrectLevel.L !== undefined) 
+                ? QRCode.CorrectLevel.L 
+                : 1;
+
+            new QRCode(tempDiv, {
+                text: safeText,
+                width: size,
+                height: size,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: correctLvl
+            });
+            
+            const svg = tempDiv.querySelector('svg');
+            let resultHtml = '';
+            if (svg) {
+                svg.setAttribute('style', `width:${size}px; height:${size}px; display:block; margin:0 auto;`);
+                resultHtml = svg.outerHTML;
+            } else {
+                const img = tempDiv.querySelector('img');
+                const canvas = tempDiv.querySelector('canvas');
+                if (img && img.src && img.src.startsWith('data:')) {
+                    resultHtml = `<img src="${img.src}" style="width:${size}px; height:${size}px; display:block; margin:0 auto;" />`;
+                } else if (canvas) {
+                    resultHtml = `<img src="${canvas.toDataURL('image/png')}" style="width:${size}px; height:${size}px; display:block; margin:0 auto;" />`;
+                }
+            }
+            tempDiv.remove();
+            if (resultHtml) return resultHtml;
+        }
+    } catch (e) {
+        console.warn("Offline QR generation fallback:", e);
+    }
+    return `<div class="invoice-qr-code" style="margin:0 auto; width:${size}px; height:${size}px; border:1px dashed #999; display:flex; align-items:center; justify-content:center; font-size:10px;">QR</div>`;
+}
+
+function generateOfflineBarcodeSVG(barcodeText, width = 1.4, height = 30) {
+    try {
+        if (typeof JsBarcode !== 'undefined' && barcodeText) {
+            const svgNode = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            JsBarcode(svgNode, String(barcodeText), {
+                format: "CODE128",
+                width: width,
+                height: height,
+                displayValue: false,
+                margin: 0
+            });
+            return svgNode.outerHTML;
+        }
+    } catch(e) {
+        console.warn("Offline barcode generation:", e);
+    }
+    return '';
+}
+
 function printInvoice(invoiceData) {
     // قراءة القالب المحفوظ
-    const savedSettings  = JSON.parse(localStorage.getItem('bayan_print_template_choice') || '{}');
+    const savedSettings  = JSON.parse(getStore('bayan_print_template_choice') || '{}');
     const templateChoice = invoiceData.template || savedSettings.template || '80mm Standard';
 
     // بيانات المتجر
@@ -74,8 +150,8 @@ function printInvoice(invoiceData) {
             ? (typeof item.selectedUnit === 'object' ? item.selectedUnit.unitName : item.selectedUnit)
             : (item.unit || 'قطعة');
         return `<tr>
-            <td style="text-align:right; padding:3px 5px; border:1px solid #000;">${item.name || ''}</td>
-            <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${qty} ${unitName}</td>
+            <td style="text-align:right; padding:3px 5px; border:1px solid #000;">${escapePrintHtml(item.name)}</td>
+            <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${qty} ${escapePrintHtml(unitName)}</td>
             <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${price.toFixed(2)}</td>
             <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${lineTotal}</td>
         </tr>`;
@@ -90,8 +166,8 @@ function printInvoice(invoiceData) {
             ? (typeof item.selectedUnit === 'object' ? item.selectedUnit.unitName : item.selectedUnit)
             : (item.unit || 'قطعة');
         return `<tr>
-            <td style="text-align:right; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${item.name || ''}</td>
-            <td style="text-align:center; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${qty} ${unitName}</td>
+            <td style="text-align:right; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${escapePrintHtml(item.name)}</td>
+            <td style="text-align:center; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${qty} ${escapePrintHtml(unitName)}</td>
             <td style="text-align:center; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${lineTotal}</td>
         </tr>`;
     }).join('');
@@ -143,6 +219,7 @@ function printInvoice(invoiceData) {
     printWindow.document.write(`
         <html dir="rtl" lang="ar">
         <head>
+            <base href="${window.location.href.split('/').slice(0, -1).join('/') + '/'}">
             <title>${docTitle} - ${shopName}</title>
             <style>
                 @page { margin: 0; size: ${pageWidth} auto; }
@@ -160,20 +237,23 @@ function printInvoice(invoiceData) {
                     color: #000 !important;
                 }
                 * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
-                tr, td, th { background-color: transparent !important; }
+                @media print { .no-print { display: none !important; } }
             </style>
         </head>
         <body>
+            <div class="no-print" style="text-align: center; margin-bottom: 15px; padding: 10px; background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                <button onclick="window.print()" style="background: #2563eb; color: white; padding: 10px 25px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🖨️ طباعة الآن</button>
+                <button onclick="window.close()" style="background: #ef4444; color: white; padding: 10px 25px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-right: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">❌ إغلاق</button>
+            </div>
             ${content}
             <script>
                 window.onload = function() {
                     setTimeout(function() {
                         window.focus();
                         window.print();
-                        setTimeout(function() { window.close(); }, 500);
-                    }, 300);
+                    }, 250);
                 };
-            <\/script>
+            </script>
         </body>
         </html>
     `);
@@ -181,16 +261,16 @@ function printInvoice(invoiceData) {
 }
 
 function savePrintTemplate(templateName) {
-    localStorage.setItem('bayan_print_template_choice', JSON.stringify({ template: templateName }));
+    setStore('bayan_print_template_choice', JSON.stringify({ template: templateName }));
 }
 
 // ============================================================
 // ➕ إضافة قالب للقوالب المحفوظة
 // ============================================================
 function addToMyTemplates(templateName, docType) {
-    const name     = templateName || JSON.parse(localStorage.getItem('bayan_print_template_choice') || '{}').template || '80mm Standard';
+    const name     = templateName || JSON.parse(getStore('bayan_print_template_choice') || '{}').template || '80mm Standard';
     const type     = docType     || 'فاتورة المبيعات';
-    const userTemplates = JSON.parse(localStorage.getItem('bayan_user_templates') || '[]');
+    const userTemplates = JSON.parse(getStore('bayan_user_templates') || '[]');
 
     const exists = userTemplates.find(t => t.id === name && t.type === type);
     if (exists) {
@@ -199,7 +279,7 @@ function addToMyTemplates(templateName, docType) {
     }
 
     userTemplates.push({ type, id: name, addedAt: new Date().toLocaleString('ar-EG') });
-    localStorage.setItem('bayan_user_templates', JSON.stringify(userTemplates));
+    setStore('bayan_user_templates', JSON.stringify(userTemplates));
     if (typeof showToast === 'function') showToast('✅ تمت إضافة القالب إلى تصميماتي');
     else alert('✅ تمت إضافة القالب إلى تصميماتي');
 }
@@ -212,7 +292,7 @@ function openFreeEditor(invoiceData) {
     const existingModal = document.getElementById('bayPrintEditorModal');
     if (existingModal) existingModal.remove();
 
-    const savedSettings  = JSON.parse(localStorage.getItem('bayan_print_template_choice') || '{}');
+    const savedSettings  = JSON.parse(getStore('bayan_print_template_choice') || '{}');
     const templateName   = (invoiceData && invoiceData.template) || savedSettings.template || '80mm Standard';
 
     // الحصول على الـ HTML الحالي للقالب المختار
@@ -258,14 +338,14 @@ function openFreeEditor(invoiceData) {
             <tr>
                 <td style="text-align:right; padding:3px 5px; border:1px solid #000;">${item.name}</td>
                 <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${item.qty} ${item.unit}</td>
-                <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${item.price.toFixed(2)}</td>
-                <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${item.total.toFixed(2)}</td>
+                <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${(parseFloat(item.price) || 0).toFixed(2)}</td>
+                <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${(parseFloat(item.total) || 0).toFixed(2)}</td>
             </tr>`).join(''),
         itemsRowsCompact: sampleData.items.map(item => `
             <tr>
                 <td style="padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${item.name}</td>
                 <td style="text-align:center; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${item.qty}</td>
-                <td style="text-align:center; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${item.total.toFixed(2)}</td>
+                <td style="text-align:center; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${(parseFloat(item.total) || 0).toFixed(2)}</td>
             </tr>`).join('')
     };
 
@@ -370,18 +450,18 @@ function openFreeEditor(invoiceData) {
         if (preview) preview.innerHTML = code;
     };
 
-    window.saveFreeTemplate = function() {
+    window.saveFreeTemplate = async function() {
         const code = document.getElementById('bayPrintEditorCode').value;
-        const name = prompt('اسم القالب الجديد:');
+        const name = await showCustomPrompt('اسم القالب الجديد:');
         if (!name) return;
-        const userTemplates = JSON.parse(localStorage.getItem('bayan_user_templates') || '[]');
+        const userTemplates = JSON.parse(getStore('bayan_user_templates') || '[]');
         userTemplates.push({
             type: 'مخصص ✏️',
             id: name,
             html: code,
             addedAt: new Date().toLocaleString('ar-EG')
         });
-        localStorage.setItem('bayan_user_templates', JSON.stringify(userTemplates));
+        setStore('bayan_user_templates', JSON.stringify(userTemplates));
         if (typeof showToast === 'function') showToast(`✅ تم حفظ القالب "${name}" في تصميماتي`);
         else alert(`✅ تم حفظ القالب "${name}"`);
     };
@@ -392,10 +472,15 @@ function openFreeEditor(invoiceData) {
         if (!printWindow) { alert('يرجى السماح بفتح النوافذ المنبثقة'); return; }
         printWindow.document.write(`
             <html dir="rtl" lang="ar">
-            <head><title>طباعة مخصصة</title>
-            <style>@page{margin:0;} body{margin:0;padding:5px;font-family:Arial,sans-serif;}</style></head>
-            <body>${code}
-            <script>window.onload=function(){setTimeout(function(){window.print();setTimeout(function(){window.close();},500);},300);};<\/script>
+            <head><title>طباعة الفاتورة</title>
+            <style>@page{margin:0;} body{margin:0;padding:5px;font-family:Arial,sans-serif;} @media print { .no-print { display: none !important; } }</style></head>
+            <body>
+            <div class="no-print" style="text-align: center; margin-bottom: 15px; padding: 10px; background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                <button onclick="window.print()" style="background: #2563eb; color: white; padding: 10px 25px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🖨️ طباعة الآن</button>
+                <button onclick="window.close()" style="background: #ef4444; color: white; padding: 10px 25px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-right: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">❌ إغلاق</button>
+            </div>
+            ${code}
+            <script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>
             </body></html>
         `);
         printWindow.document.close();
@@ -409,7 +494,68 @@ function openFreeEditor(invoiceData) {
     };
 }
 
+function generateOfflineInvoiceQR(text, size = 110) {
+    try {
+        if (typeof QRCode !== 'undefined' && text) {
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'fixed';
+            tempDiv.style.left = '-9999px';
+            tempDiv.style.top = '-9999px';
+            tempDiv.style.width = size + 'px';
+            tempDiv.style.height = size + 'px';
+            document.body.appendChild(tempDiv);
+            
+            // تنظيف النص وضمان حجم بيانات مناسب وسريع القراءة
+            const cleanText = String(text).trim();
+            const safeText = cleanText.length > 200 ? cleanText.substring(0, 200) : cleanText;
 
+            const correctLvl = (typeof QRCode !== 'undefined' && QRCode.CorrectLevel && QRCode.CorrectLevel.L !== undefined) 
+                ? QRCode.CorrectLevel.L 
+                : 1;
+
+            new QRCode(tempDiv, {
+                text: safeText,
+                width: size,
+                height: size,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: correctLvl
+            });
+            
+            let resultHtml = '';
+            const canvas = tempDiv.querySelector('canvas');
+            const img = tempDiv.querySelector('img');
+            const svg = tempDiv.querySelector('svg');
+
+            if (canvas) {
+                try {
+                    const dataUrl = canvas.toDataURL('image/png');
+                    if (dataUrl && dataUrl.length > 100) {
+                        resultHtml = `<img src="${dataUrl}" style="width:${size}px; height:${size}px; display:block; margin:0 auto;" />`;
+                    }
+                } catch (err) {
+                    console.warn("Canvas toDataURL:", err);
+                }
+            }
+
+            if (!resultHtml && img && img.src && img.src.startsWith('data:')) {
+                resultHtml = `<img src="${img.src}" style="width:${size}px; height:${size}px; display:block; margin:0 auto;" />`;
+            } else if (!resultHtml && svg) {
+                svg.setAttribute('style', `width:${size}px; height:${size}px; display:block; margin:0 auto;`);
+                resultHtml = svg.outerHTML;
+            }
+
+            tempDiv.remove();
+            if (resultHtml) return resultHtml;
+        }
+    } catch (e) {
+        console.warn("Offline QR generation fallback:", e);
+    }
+    
+    // في حال عدم توفر مكتبة الـ canvas محلياً، نستخدم خدمة توليد الصور المباشرة
+    const encoded = encodeURIComponent(String(text).substring(0, 150));
+    return `<img src="https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encoded}" style="width:${size}px; height:${size}px; display:block; margin:0 auto;" onerror="this.style.display='none'" />`;
+}
 
 // ============================================================
 // القوالب
@@ -422,9 +568,9 @@ function build80mmStandard(d) {
     // تصفية أسطر الأصناف من الإيموجيات للحفاظ على جودة الطباعة
     const cleanItemsRows = d.itemsRowsFull.replace(/📤|📥|🔄|🔙|💵|💸|⚖️|🚚|🛒|🛍️|🧺|📦|💰|🌗|✅|⏳/g, '');
 
-    // إنشاء الباركود QR Code يحتوي على تفاصيل الفاتورة
-    const qrData = `Inv: #${d.invoiceNumber}\nType: ${d.invoiceType}\nTotal: ${parseFloat(d.totalAmount).toFixed(2)}`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(qrData)}`;
+    // إنشاء الـ QR Code الحقيقي
+    const qrData = `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrHtml = generateOfflineInvoiceQR(qrData, 100);
 
     return `
     <div style="width:75mm; margin:0; font-family:'Arial','Segoe UI',sans-serif; direction:rtl; padding:5px 6px; color:#000; box-sizing:border-box; line-height:1.5; font-weight:bold;">
@@ -449,13 +595,19 @@ function build80mmStandard(d) {
             ${d.dueDate  ? `<div style="padding-right:3px;">تاريخ الاستحقاق: ${d.dueDate}</div>`  : ''}
         </div>
 
-        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:8px; border:1px solid #000; font-weight:bold;">
+        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:8px; border:1px solid #000; font-weight:bold; table-layout:fixed; box-sizing:border-box;">
+            <colgroup>
+                <col style="width:42%;">
+                <col style="width:17%;">
+                <col style="width:17%;">
+                <col style="width:24%;">
+            </colgroup>
             <thead>
                 <tr style="border-bottom:2px solid #000; background:#f5f5f5;">
-                    <th style="text-align:right; padding:4px 3px; border:1px solid #000; font-size:11px;">الصنف</th>
-                    <th style="text-align:center; padding:4px 3px; border:1px solid #000; font-size:11px; width:18%;">الكمية</th>
-                    <th style="text-align:center; padding:4px 3px; border:1px solid #000; font-size:11px; width:18%;">السعر</th>
-                    <th style="text-align:center; padding:4px 3px; border:1px solid #000; font-size:11px; width:22%;">الإجمالي</th>
+                    <th style="text-align:right; padding:4px 3px; border:1px solid #000; font-size:11px; overflow:hidden;">الصنف</th>
+                    <th style="text-align:center; padding:4px 3px; border:1px solid #000; font-size:11px;">الكمية</th>
+                    <th style="text-align:center; padding:4px 3px; border:1px solid #000; font-size:11px;">السعر</th>
+                    <th style="text-align:center; padding:4px 3px; border:1px solid #000; font-size:11px;">الإجمالي</th>
                 </tr>
             </thead>
             <tbody>${cleanItemsRows}</tbody>
@@ -506,8 +658,7 @@ function build80mmStandard(d) {
             ${d.footerMsg ? `<div style="font-size:11px; line-height:1.4; white-space: pre-line;">${d.footerMsg}</div>` : ''}
             
             <div style="margin-top:10px; text-align:center;">
-                <img src="${qrUrl}" style="width:80px; height:80px; border:1px solid #000; padding:2px; background:#fff;" />
-                <div style="font-size:11px; font-weight:900; margin-top:3px;">بيان POS</div>
+                ${qrHtml}
             </div>
         </div>
     </div>`;
@@ -520,8 +671,8 @@ function build80mmCompact(d) {
     // تصفية الأصناف من الإيموجيات
     const cleanItemsRows = d.itemsRowsCompact.replace(/📤|📥|🔄|🔙|💵|💸|⚖️|🚚|🛒|🛍️|🧺|📦|💰|🌗|✅|⏳/g, '');
 
-    const qrData = `Inv: #${d.invoiceNumber}\nType: ${d.invoiceType}\nTotal: ${parseFloat(d.totalAmount).toFixed(2)}`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(qrData)}`;
+    const qrData = `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrHtml = generateOfflineInvoiceQR(qrData, 100);
 
     return `
     <div style="width:75mm; margin:0; font-family:Arial,sans-serif; direction:rtl; padding:3mm 6mm; color:#000; font-size:13px; font-weight:900; box-sizing:border-box;">
@@ -552,7 +703,7 @@ function build80mmCompact(d) {
         <div style="font-size:13px; font-weight:900;">
             <div style="display:flex; justify-content:space-between; font-size:15px; border-top:2px dashed #000; border-bottom:2px dashed #000; margin:3px 0; padding:2px 0;">
                 <span>المطلوب:</span>
-                <span>${parseFloat(d.totalAmount).toFixed(2)} ج.م</span>
+                <span>${parseFloat(d.totalAmount).toFixed(2)} ${typeof getCurrencySymbol === 'function' ? getCurrencySymbol() : 'ج.م'}</span>
             </div>
             ${d.discount && parseFloat(d.discount) > 0 ? `
             <div style="display:flex; justify-content:space-between; color:#c0392b;"><span>خصم:</span><span>${parseFloat(d.discount).toFixed(2)}</span></div>
@@ -572,8 +723,7 @@ function build80mmCompact(d) {
         <div style="text-align:center; border-top:1px solid #000; padding-top:5px; margin-top:5px; font-size:12px; font-weight:900;">
             <div style="white-space: pre-line;">${d.footerMsg}</div>
             <div style="margin-top:10px; text-align:center;">
-                <img src="${qrUrl}" style="width:80px; height:80px; border:1px solid #000; padding:2px; background:#fff;" />
-                <div style="font-size:11px; font-weight:900; margin-top:3px;">بيان POS</div>
+                ${qrHtml}
             </div>
         </div>
     </div>`;
@@ -581,6 +731,9 @@ function build80mmCompact(d) {
 
 // ─── 57mm Mobile ──────────────────────────────────────────────
 function build57mm(d) {
+    const qrData = `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrHtml = generateOfflineInvoiceQR(qrData, 90);
+
     return `
     <div style="width:57mm; font-family:Arial,sans-serif; direction:rtl; padding:2mm; color:#000; font-size:11px; font-weight:bold;">
         <div style="text-align:center; border-bottom:1px dashed #000; padding-bottom:4px; margin-bottom:4px;">
@@ -609,12 +762,20 @@ function build57mm(d) {
         <div style="display:flex; justify-content:space-between; font-size:10px;">
             <span>آجل:</span><span>${parseFloat(d.deferred).toFixed(2)}</span>
         </div>
-        <div style="text-align:center; border-top:1px dashed #000; padding-top:4px; margin-top:4px; font-size:9px; white-space: pre-line;">${d.footerMsg}</div>
+        <div style="text-align:center; border-top:1px dashed #000; padding-top:4px; margin-top:4px; font-size:9px; white-space: pre-line;">
+            ${d.footerMsg}
+            <div style="margin-top:6px; text-align:center;">
+                ${qrHtml}
+            </div>
+        </div>
     </div>`;
 }
 
 // ─── A4 Professional ──────────────────────────────────────────
 function buildA4Professional(d) {
+    const qrData = `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrHtml = generateOfflineInvoiceQR(qrData, 110);
+
     return `
     <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif; direction:rtl; padding:30px; background:#fff; color:#333;">
         <div style="display:flex; justify-content:space-between; border-bottom:2px solid #2c3e50; padding-bottom:15px; margin-bottom:20px;">
@@ -641,10 +802,16 @@ function buildA4Professional(d) {
             </div>
         </div>
 
-        <table style="width:100%; border-collapse:collapse; margin-bottom:20px; font-size:0.9rem;">
+        <table style="width:100%; border-collapse:collapse; margin-bottom:20px; font-size:0.9rem; table-layout:fixed; box-sizing:border-box;">
+            <colgroup>
+                <col style="width:44%;">
+                <col style="width:18%;">
+                <col style="width:18%;">
+                <col style="width:20%;">
+            </colgroup>
             <thead>
                 <tr style="background:#2c3e50; color:#fff;">
-                    <th style="padding:10px; text-align:right; border:1px solid #34495e;">اسم الصنف</th>
+                    <th style="padding:10px; text-align:right; border:1px solid #34495e; overflow:hidden;">اسم الصنف</th>
                     <th style="padding:10px; text-align:center; border:1px solid #34495e;">الكمية</th>
                     <th style="padding:10px; text-align:center; border:1px solid #34495e;">السعر</th>
                     <th style="padding:10px; text-align:center; border:1px solid #34495e;">الإجمالى</th>
@@ -653,25 +820,33 @@ function buildA4Professional(d) {
             <tbody>${d.itemsRowsFull}</tbody>
         </table>
 
-        <div style="display:flex; justify-content:flex-end;">
-            <div style="width:280px; background:#f9f9f9; padding:15px; border-radius:6px; border:1px solid #eee;">
-                <div style="display:flex; justify-content:space-between; font-size:1.2rem; font-weight:bold; color:#2c3e50; margin-bottom:8px;">
-                    <span>الإجمالي المطلوب:</span><span>${parseFloat(d.totalAmount).toFixed(2)}</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; color:#27ae60; margin-bottom:5px;">
-                    <span>المدفوع:</span><span>${parseFloat(d.paid).toFixed(2)}</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; color:#c0392b; font-weight:bold; margin-bottom:5px;">
-                    <span>الآجل:</span><span>${parseFloat(d.deferred).toFixed(2)}</span>
-                </div>
-                ${parseFloat(d.prevBalance) > 0 ? `
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                    <span>الرصيد السابق:</span><span>${parseFloat(d.prevBalance).toFixed(2)}</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-weight:bold;">
-                    <span>الرصيد الحالى:</span><span>${parseFloat(d.currentBalance).toFixed(2)}</span>
-                </div>` : ''}
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="text-align:center; padding:10px;">
+                ${qrHtml}
             </div>
+            <table style="width:280px; background:#f9f9f9; padding:15px; border-radius:6px; border:1px solid #eee;">
+                <tr>
+                    <td style="font-weight:bold; color:#2c3e50; padding:4px 0;">الإجمالي المطلوب:</td>
+                    <td style="text-align:left; font-weight:bold;">${parseFloat(d.totalAmount).toFixed(2)}</td>
+                </tr>
+                <tr>
+                    <td style="color:#27ae60; padding:3px 0;">المدفوع:</td>
+                    <td style="text-align:left;">${parseFloat(d.paid).toFixed(2)}</td>
+                </tr>
+                <tr>
+                    <td style="color:#c0392b; font-weight:bold; padding:3px 0;">الآجل:</td>
+                    <td style="text-align:left; color:#c0392b;">${parseFloat(d.deferred).toFixed(2)}</td>
+                </tr>
+                ${parseFloat(d.prevBalance) > 0 ? `
+                <tr>
+                    <td style="padding:3px 0;">الرصيد السابق:</td>
+                    <td style="text-align:left;">${parseFloat(d.prevBalance).toFixed(2)}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight:bold; padding:3px 0;">الرصيد الحالى:</td>
+                    <td style="text-align:left; font-weight:bold;">${parseFloat(d.currentBalance).toFixed(2)}</td>
+                </tr>` : ''}
+            </table>
         </div>
 
         <div style="margin-top:40px; text-align:center; border-top:1px solid #ddd; padding-top:15px; color:#7f8c8d;">
@@ -683,6 +858,9 @@ function buildA4Professional(d) {
 
 // ─── A5 Modern ────────────────────────────────────────────────
 function buildA5Modern(d) {
+    const qrData = `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrHtml = generateOfflineInvoiceQR(qrData, 100);
+
     return `
     <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif; direction:rtl; padding:20px; background:#fff; color:#333; width:148mm;">
         <div style="text-align:center; margin-bottom:15px; border-bottom:2px solid #e67e22; padding-bottom:10px;">
@@ -713,29 +891,34 @@ function buildA5Modern(d) {
             <tbody>${d.itemsRowsFull}</tbody>
         </table>
 
-        <table style="width:100%; font-size:0.9rem; border-top:2px solid #34495e;">
-            <tr>
-                <td style="font-weight:bold; padding:4px 0;">الإجمالي المطلوب:</td>
-                <td style="text-align:left; font-weight:bold; font-size:1.1rem;">${parseFloat(d.totalAmount).toFixed(2)} ج.م</td>
-            </tr>
-            <tr>
-                <td style="color:#27ae60; padding:3px 0;">المدفوع:</td>
-                <td style="text-align:left; color:#27ae60;">${parseFloat(d.paid).toFixed(2)}</td>
-            </tr>
-            <tr>
-                <td style="color:#c0392b; font-weight:bold; padding:3px 0;">الآجل:</td>
-                <td style="text-align:left; color:#c0392b;">${parseFloat(d.deferred).toFixed(2)}</td>
-            </tr>
-            ${parseFloat(d.prevBalance) > 0 ? `
-            <tr>
-                <td style="padding:3px 0;">الرصيد السابق:</td>
-                <td style="text-align:left;">${parseFloat(d.prevBalance).toFixed(2)}</td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; padding:3px 0;">الرصيد الحالى:</td>
-                <td style="text-align:left; font-weight:bold;">${parseFloat(d.currentBalance).toFixed(2)}</td>
-            </tr>` : ''}
-        </table>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;">
+            <div style="text-align:center;">
+                ${qrHtml}
+            </div>
+            <table style="width:55%; font-size:0.9rem; border-top:2px solid #34495e;">
+                <tr>
+                    <td style="font-weight:bold; padding:4px 0;">الإجمالي المطلوب:</td>
+                    <td style="text-align:left; font-weight:bold; font-size:1.1rem;">${parseFloat(d.totalAmount).toFixed(2)} ${typeof getCurrencySymbol === 'function' ? getCurrencySymbol() : 'ج.م'}</td>
+                </tr>
+                <tr>
+                    <td style="color:#27ae60; padding:3px 0;">المدفوع:</td>
+                    <td style="text-align:left; color:#27ae60;">${parseFloat(d.paid).toFixed(2)}</td>
+                </tr>
+                <tr>
+                    <td style="color:#c0392b; font-weight:bold; padding:3px 0;">الآجل:</td>
+                    <td style="text-align:left; color:#c0392b;">${parseFloat(d.deferred).toFixed(2)}</td>
+                </tr>
+                ${parseFloat(d.prevBalance) > 0 ? `
+                <tr>
+                    <td style="padding:3px 0;">الرصيد السابق:</td>
+                    <td style="text-align:left;">${parseFloat(d.prevBalance).toFixed(2)}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight:bold; padding:3px 0;">الرصيد الحالى:</td>
+                    <td style="text-align:left; font-weight:bold;">${parseFloat(d.currentBalance).toFixed(2)}</td>
+                </tr>` : ''}
+            </table>
+        </div>
 
         <div style="text-align:center; margin-top:20px; font-size:0.8rem; color:#7f8c8d; border-top:1px dashed #bdc3c7; padding-top:10px;">
             <p style="white-space: pre-line;">${d.footerMsg}</p>

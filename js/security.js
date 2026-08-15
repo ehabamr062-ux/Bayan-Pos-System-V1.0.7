@@ -2,9 +2,9 @@
  * Bayan POS Security Enhancements
  * Anti-Inspect, Anti-Copy, Anti-DevTools
  */
-(function() {
+(function () {
     // 1. منع قائمة السياق (كليك يمين)
-    document.addEventListener('contextmenu', function(e) {
+    document.addEventListener('contextmenu', function (e) {
         // السماح بها فقط داخل حقول الإدخال
         if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
             e.preventDefault();
@@ -12,19 +12,19 @@
     });
 
     // 2. منع اختصارات لوحة المفاتيح
-    document.addEventListener('keydown', function(e) {
+    document.addEventListener('keydown', function (e) {
         // F12
         if (e.keyCode === 123) {
             e.preventDefault();
             return false;
         }
-        
+
         // Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
         if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) {
             e.preventDefault();
             return false;
         }
-        
+
         // Ctrl+U (View Source)
         if (e.ctrlKey && e.keyCode === 85) {
             e.preventDefault();
@@ -36,7 +36,7 @@
             e.preventDefault();
             return false;
         }
-        
+
         // Ctrl+P (Print) - نمنع الطباعة من الكيبورد إذا لم تكن مقصودة من النظام
         if (e.ctrlKey && e.keyCode === 80) {
             e.preventDefault();
@@ -72,17 +72,50 @@
     `;
     document.head.appendChild(style);
 
-    // 4. تقنية تعليق أدوات المطور (Debugger Trap)
-    // تقوم بإيقاف عمل المتصفح تماماً إذا حاول أحدهم فتح الـ Console أو Inspect Element
-    setInterval(function() {
-        (function() { return false; }['constructor']('debugger')());
-    }, 500);
+
 
     // 5. منع سحب وإسقاط الصور والنصوص
-    document.addEventListener('dragstart', function(e) {
+    document.addEventListener('dragstart', function (e) {
         if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
             e.preventDefault();
         }
     });
+
+    // 6. طبقة تشفير وتأمين التخزين المحلي والجلسة (Secure Storage Shield)
+    window.BayanSecurity = {
+        // تشفير خفيف وسريع للبيانات الحساسة
+        obfuscate: function (str) {
+            if (!str) return '';
+            try {
+                return btoa(encodeURIComponent(str).split('').reverse().join(''));
+            } catch (e) {
+                return str;
+            }
+        },
+        // فك التشفير
+        deobfuscate: function (str) {
+            if (!str) return '';
+            try {
+                return decodeURIComponent(atob(str).split('').reverse().join(''));
+            } catch (e) {
+                return str;
+            }
+        },
+        // التحقق من سلامة الجلسة وصلاحية المستخدم
+        validateSession: function () {
+            const user = window.currentUser;
+            if (!user && document.getElementById('loginModal') && document.getElementById('loginModal').style.display === 'none') {
+                console.warn('⚠️ جلسة غير مصرح بها. إعادة التوجيه لشاشة تسجيل الدخول...');
+                if (typeof window.showLoginScreen === 'function') window.showLoginScreen();
+            }
+        }
+    };
+
+    // مراقبة أمان الجلسة دورياً
+    setInterval(function () {
+        if (window.BayanSecurity && typeof window.BayanSecurity.validateSession === 'function') {
+            window.BayanSecurity.validateSession();
+        }
+    }, 5000);
 
 })();

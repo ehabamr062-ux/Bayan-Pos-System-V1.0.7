@@ -1,7 +1,7 @@
 /* premium.css - Bayan POS Ultimate Glassmorphism & Animations Upgrade */
 
 :root {
-    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-bg: rgba(255, 255, 255, 0.94);
     --glass-border: rgba(255, 255, 255, 0.5);
     --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
     --neon-green: #00ff88;
@@ -14,7 +14,7 @@ body {
 }
 
 body.dark-mode {
-    --glass-bg: rgba(15, 23, 42, 0.65);
+    --glass-bg: rgba(15, 23, 42, 0.95);
     --glass-border: rgba(255, 255, 255, 0.06);
     --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
     background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #020617 100%) !important;
@@ -30,8 +30,7 @@ body:not(.dark-mode) {
 /* Base Glassmorphism for Panels */
 .dashboard-card, .stat-card, .invoice-panel, .panel, .sidebar, .top-nav {
     background: var(--glass-bg) !important;
-    backdrop-filter: blur(16px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+    /* backdrop-filter: blur(10px); — disabled */
     border: 1px solid var(--glass-border) !important;
     box-shadow: var(--glass-shadow) !important;
     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -52,7 +51,7 @@ body.dark-mode .dashboard-card:hover {
 input, select, textarea {
     background: rgba(255, 255, 255, 0.45) !important;
     border: 1px solid rgba(0,0,0,0.08) !important;
-    backdrop-filter: blur(6px);
+    /* backdrop-filter disabled */
     transition: all 0.25s ease-in-out;
 }
 input:focus, select:focus, textarea:focus {
@@ -104,7 +103,7 @@ button:active, .btn:active {
 }
 table th {
     background: rgba(0,0,0,0.03) !important;
-    backdrop-filter: blur(10px);
+    /* backdrop-filter disabled */
 }
 body.dark-mode table th {
     background: rgba(255,255,255,0.05) !important;
@@ -123,7 +122,7 @@ body.dark-mode table tbody tr:hover {
 /* Modals */
 .modal-content, .modal-glass-body {
     background: var(--glass-bg) !important;
-    backdrop-filter: blur(25px) saturate(200%) !important;
+    /* backdrop-filter disabled */
     border: 1px solid var(--glass-border) !important;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
     animation: modalPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
@@ -134,65 +133,7 @@ body.dark-mode table tbody tr:hover {
     100% { transform: scale(1) translateY(0); opacity: 1; }
 }
 
-/* Scrollbar styling for modern look */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-::-webkit-scrollbar-track {
-    background: transparent;
-}
-::-webkit-scrollbar-thumb {
-    background: rgba(0,0,0,0.2);
-    border-radius: 4px;
-}
-body.dark-mode ::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.2);
-}
-::-webkit-scrollbar-thumb:hover {
-    background: var(--main-green);
-}
-body.dark-mode ::-webkit-scrollbar-thumb:hover {
-    background: var(--accent-gold);
-}
-
-/* Invoices Specific Scrollbar Override */
-#invoicesTableContainer::-webkit-scrollbar,
-#invoices-section .table-container::-webkit-scrollbar {
-    width: 10px !important;
-    height: 10px !important;
-}
-
-#invoicesTableContainer::-webkit-scrollbar-track,
-#invoices-section .table-container::-webkit-scrollbar-track {
-    background: #f1f5f9 !important;
-    border-radius: 5px !important;
-}
-
-body.dark-mode #invoicesTableContainer::-webkit-scrollbar-track,
-body.dark-mode #invoices-section .table-container::-webkit-scrollbar-track {
-    background: #0f172a !important;
-}
-
-#invoicesTableContainer::-webkit-scrollbar-thumb,
-#invoices-section .table-container::-webkit-scrollbar-thumb {
-    background: #8e44ad !important;
-    border-radius: 5px !important;
-    border: 2px solid #f1f5f9 !important;
-}
-
-body.dark-mode #invoicesTableContainer::-webkit-scrollbar-thumb,
-body.dark-mode #invoices-section .table-container::-webkit-scrollbar-thumb {
-    background: #6b21a8 !important;
-    border-color: #0f172a !important;
-}
-
-#invoicesTableContainer::-webkit-scrollbar-thumb:hover,
-#invoices-section .table-container::-webkit-scrollbar-thumb:hover {
-    background: #732d91 !important;
-}
-
-body.dark-mode #invoicesTableContainer::-webkit-scrollbar-thumb:hover,
-body.dark-mode #invoices-section .table-container::-webkit-scrollbar-thumb:hover {
-    background: #a855f7 !important;
-}
+/* =======================================================
+   ⚠️  Scrollbar rules removed from this file.
+   All scrollbar styles are now in: css/scrollbars.css
+   ======================================================= */

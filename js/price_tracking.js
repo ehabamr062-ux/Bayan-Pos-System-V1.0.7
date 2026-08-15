@@ -1,4 +1,4 @@
-﻿function initPriceTracking() {
+function initPriceTracking() {
     renderPriceTrackingDashboard();
 }
 
@@ -12,10 +12,10 @@ async function renderPriceTrackingDashboard() {
         { name: "أبيض", field: "w", color: "#475569", bg: "#f8fafc", border: "#e2e8f0" },
         { name: "بلدي", field: "b", color: "#16a34a", bg: "#f0fdf4", border: "#dcfce7" }
     ];
-    const mappedProducts = JSON.parse(localStorage.getItem('bayan_mapped_products') || JSON.stringify(defaultProducts));
+    const mappedProducts = JSON.parse(getStore('bayan_mapped_products') || JSON.stringify(defaultProducts));
 
     // جلب البيانات المحفوظة فوراً لوضعها داخل الـ HTML
-    const savedData = JSON.parse(localStorage.getItem('bayan_egg_prices') || '{}');
+    const savedData = JSON.parse(getStore('bayan_egg_prices') || '{}');
     const displayDate = savedData.date || '--';
 
     const boxesHtml = mappedProducts.map(p => `
@@ -33,9 +33,12 @@ async function renderPriceTrackingDashboard() {
                 <div class="products-panel">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
                         <button class="btn-back-home" onclick="switchSection('dashboard')" title="العودة للقائمة الرئيسية">↩️</button>
-                        <div class="section-header-box" style="background: linear-gradient(135deg, #2c3e50, #000000); margin:0;">
-                            <span class="icon">💰</span>
-                            <span class="title">متابعة أسعار المنتجات والربحية</span>
+                        <div class="section-header-box" style="background: linear-gradient(135deg, #2c3e50, #000000); margin:0; display: flex; align-items: center; justify-content: space-between; flex: 1; margin-right: 15px;">
+                            <div style="display: flex; align-items: center;">
+                                <span class="icon">💰</span>
+                                <span class="title">متابعة أسعار المنتجات والربحية</span>
+                            </div>
+                            <span style="background: #f59e0b; color: #fff; font-size: 0.85rem; font-weight: 900; padding: 4px 15px; border-radius: 12px; letter-spacing: 0.5px;">🚀 سيتم تطوير التطبيق 15/9 إن شاء الله قريباً</span>
                         </div>
                     </div>
                     <!-- بورصة البيض المطورة (Ultra-Compact Strip) -->
@@ -230,10 +233,10 @@ async function renderPriceTrackingDashboard() {
                 { name: "أبيض", field: "w", color: "#475569", bg: "#f8fafc", border: "#e2e8f0" },
                 { name: "بلدي", field: "b", color: "#16a34a", bg: "#f0fdf4", border: "#dcfce7" }
             ];
-            const mappedProducts = JSON.parse(localStorage.getItem('bayan_mapped_products') || JSON.stringify(defaultProducts));
+            const mappedProducts = JSON.parse(getStore('bayan_mapped_products') || JSON.stringify(defaultProducts));
 
             // محاولة تحميل البيانات المحفوظة أولاً
-            const savedData = localStorage.getItem('bayan_egg_prices');
+            const savedData = getStore('bayan_egg_prices');
             const today = new Date().toLocaleDateString('en-CA');
             
             if (!btn && savedData) {
@@ -278,7 +281,7 @@ async function renderPriceTrackingDashboard() {
                     });
 
                     // حفظ في الذاكرة المحلية (السعر الحالي)
-                    localStorage.setItem('bayan_egg_prices', JSON.stringify(prices));
+                    setStore('bayan_egg_prices', JSON.stringify(prices));
                     
                     // تحديث السجل التاريخي
                     updateEggPriceHistory(prices);
@@ -440,7 +443,7 @@ async function renderPriceTrackingDashboard() {
 
         // --- سجل أسعار البيض التاريخي ---
         function updateEggPriceHistory(newPrices) {
-            let history = JSON.parse(localStorage.getItem('bayan_egg_history') || '[]');
+            let history = JSON.parse(getStore('bayan_egg_history') || '[]');
             
             // تحقق إذا كان التاريخ موجوداً مسبقاً، لو موجود حدثه، لو مش موجود ضيفه
             const index = history.findIndex(h => h.date === newPrices.date);
@@ -456,7 +459,7 @@ async function renderPriceTrackingDashboard() {
             // الاحتفاظ بآخر 100 سجل لتوفير المساحة
             if (history.length > 100) history = history.slice(0, 100);
             
-            localStorage.setItem('bayan_egg_history', JSON.stringify(history));
+            setStore('bayan_egg_history', JSON.stringify(history));
         }
 
         function showEggPriceHistory() {
@@ -464,14 +467,14 @@ async function renderPriceTrackingDashboard() {
             const tbody = document.getElementById('eggHistoryTableBody');
             if (!modal || !tbody) return;
 
-            const history = JSON.parse(localStorage.getItem('bayan_egg_history') || '[]');
+            const history = JSON.parse(getStore('bayan_egg_history') || '[]');
             
             const defaultProducts = [
                 { name: "أحمر", field: "r", color: "#ef4444" },
                 { name: "أبيض", field: "w", color: "#475569" },
                 { name: "بلدي", field: "b", color: "#16a34a" }
             ];
-            const mappedProducts = JSON.parse(localStorage.getItem('bayan_mapped_products') || JSON.stringify(defaultProducts));
+            const mappedProducts = JSON.parse(getStore('bayan_mapped_products') || JSON.stringify(defaultProducts));
 
             if (history.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="${mappedProducts.length + 1}" style="text-align:center; padding:20px; color:#94a3b8;">لا يوجد سجل أسعار محفوظ حتى الآن</td></tr>`;
@@ -597,7 +600,7 @@ async function renderPriceTrackingDashboard() {
                 { name: "بلدي", field: "b", color: "#16a34a", bg: "#f0fdf4", border: "#dcfce7" }
             ];
             
-            let mappedProducts = JSON.parse(localStorage.getItem('bayan_mapped_products') || JSON.stringify(defaultProducts));
+            let mappedProducts = JSON.parse(getStore('bayan_mapped_products') || JSON.stringify(defaultProducts));
             
             // تحقق إذا كان الكود مضاف مسبقاً
             if (mappedProducts.some(p => p.field === field)) {
@@ -617,7 +620,7 @@ async function renderPriceTrackingDashboard() {
                 border: "#e2e8f0"
             });
             
-            localStorage.setItem('bayan_mapped_products', JSON.stringify(mappedProducts));
+            setStore('bayan_mapped_products', JSON.stringify(mappedProducts));
             
             showNotifications('✅ تم حفظ الصنف الجديد بنجاح', 'success');
             closeAddMappedProductModal();

@@ -3,9 +3,9 @@
 //  النسخة المطورة للعمل أوفلاين 100%
 // ============================================================
 
-const CACHE_NAME = 'bayan-pos-v1.0.0';
-const STATIC_CACHE = 'bayan-static-v1.0.0';
-const DYNAMIC_CACHE = 'bayan-dynamic-v1.0.0';
+const CACHE_NAME = 'bayan-pos-v1.0.7';
+const STATIC_CACHE = 'bayan-static-v1.0.7';
+const DYNAMIC_CACHE = 'bayan-dynamic-v1.0.7';
 
 // كافة ملفات النظام الأساسية المتوفرة محلياً (بدون أي ملفات مفقودة تسبب فشل التثبيت)
 const STATIC_FILES = [
@@ -14,8 +14,10 @@ const STATIC_FILES = [
     './manifest.json',
     './version.txt',
     './version.json',
-    './database-api.js',
     './css/style.css',
+    './css/scrollbars.css',
+    './css/premium.css',
+    './js/store.js',
     './js/core.js',
     './js/utils.js',
     './js/security.js',
@@ -24,16 +26,20 @@ const STATIC_FILES = [
     './js/sales.js',
     './js/accounting.js',
     './js/price_tracking.js',
+    './js/price_tracking_fixes.js',
+    './js/receipt_disburse_fixes.js',
+    './js/history_enhancements.js',
+    './js/barcode.js',
     './js/settings.js',
     './js/trash.js',
     './js/init.js',
     './js/print.js',
-    './js/api_key_manager.js',
     './lib/html2canvas.min.js',
     './lib/dexie.js',
     './lib/xlsx.full.min.js',
     './lib/supabase.min.js',
     './lib/JsBarcode.all.min.js',
+    './lib/Sortable.min.js',
     './lib/chart.min.js',
     './lib/qrcode.min.js',
     './media/logo.png',
@@ -102,8 +108,8 @@ self.addEventListener('fetch', (event) => {
                 return networkResponse;
             }).catch(() => {
                 // في حالة فشل الشبكة تماماً (أوفلاين) وعدم وجود الملف في الكاش
-                if (request.destination === 'document') {
-                    return caches.match('./index.html');
+                if (request.destination === 'document' || request.mode === 'navigate') {
+                    return caches.match('./index.html') || caches.match('./');
                 }
 
                 // إرجاع SVG افتراضي في حالة فقدان صورة
@@ -113,6 +119,8 @@ self.addEventListener('fetch', (event) => {
                         { headers: { 'Content-Type': 'image/svg+xml' } }
                     );
                 }
+
+                return new Response('', { status: 408, statusText: 'Offline mode active' });
             });
         })
     );

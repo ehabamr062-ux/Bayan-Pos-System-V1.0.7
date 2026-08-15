@@ -68,20 +68,21 @@ const trashManager = {
                 case 'product': typeLabel = 'صنف / منتج'; icon = '📦'; break;
                 case 'transaction': typeLabel = 'فاتورة / عملية'; icon = '📄'; break;
                 case 'account': typeLabel = 'حساب / عميل'; icon = '👤'; break;
+                case 'warehouse': case 'مخزن': typeLabel = 'مخزن / فرع'; icon = '🏭'; break;
                 default: typeLabel = 'غير معروف'; icon = '❓';
             }
 
             const deleteDate = new Date(item.deletedAt).toLocaleString('ar-EG');
 
             tr.innerHTML = `
-                <td style="padding:15px; font-weight:bold; color:#1e293b;">${icon} ${typeLabel}</td>
-                <td style="font-weight:600;">${item.label || '---'}</td>
-                <td style="font-weight:600; color:#475569;">👤 ${item.deletedBy || 'غير معروف'}</td>
-                <td style="color:#64748b; font-size:0.8rem;">${deleteDate}</td>
-                <td style="text-align:center;">
-                    <div style="display:flex; gap:8px; justify-content:center;">
-                        <button onclick="trashManager.restore(${item.id})" class="action-btn" style="background:#22c55e; color:white; border:none; padding:6px 12px; border-radius:8px; font-size:0.75rem; cursor:pointer;" title="استعادة">🔄 استعادة</button>
-                        <button onclick="trashManager.permanentDelete(${item.id})" class="action-btn" style="background:#ef4444; color:white; border:none; padding:6px 12px; border-radius:8px; font-size:0.75rem; cursor:pointer;" title="حذف نهائي">🗑️ حذف نهائي</button>
+                <td style="padding: 8px 10px; font-weight: bold; color: #1e293b;">${icon} ${typeLabel}</td>
+                <td style="padding: 8px 10px; font-weight: 600;">${item.label || '---'}</td>
+                <td style="padding: 8px 10px; font-weight: 600; color: #475569;">👤 ${item.deletedBy || 'غير معروف'}</td>
+                <td style="padding: 8px 10px; color: #64748b; font-size: 0.78rem;">${deleteDate}</td>
+                <td style="padding: 6px 8px; text-align: center;">
+                    <div style="display: flex; gap: 5px; justify-content: center; align-items: center;">
+                        <button onclick="trashManager.restore(${item.id})" class="action-btn" style="background: #22c55e; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer; white-space: nowrap;" title="استعادة">🔄 استعادة</button>
+                        <button onclick="trashManager.permanentDelete(${item.id})" class="action-btn" style="background: #ef4444; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer; white-space: nowrap;" title="حذف نهائي">🗑️ حذف نهائي</button>
                     </div>
                 </td>
             `;
@@ -93,40 +94,136 @@ const trashManager = {
      * استعادة عنصر من سلة المحذوفات
      */
     async restore(id) {
-        const item = window.trashBin.find(x => x.id === id);
+        const item = window.trashBin.find(x => String(x.id) === String(id));
         if (!item) {
             alert("⚠️ لم يتم العثور على العنصر في السلة!");
             return;
         }
 
         try {
-            const data = item.originalData;
+            let data = item.originalData;
+            if (typeof data === 'string') {
+                try { data = JSON.parse(data); } catch(e) {}
+            }
+
+            const itemType = String(item.type || '').toLowerCase();
             
-            if (item.type === 'product') {
-                await db.products.put(data);
+            if (itemType === 'product' || itemType === 'inventory') {
+                const itemsToRestore = Array.isArray(data) ? data : [data];
+                for (const p of itemsToRestore) {
+                    if (!p) continue;
+                    const cleanP = typeof p === 'object' ? { ...p } : p;
+                    if (cleanP.id) delete cleanP.id;
+                    await db.products.add(cleanP);
+                }
                 window.productsDB = await db.products.toArray();
                 if (typeof renderInventoryTable === 'function') renderInventoryTable();
-            } else if (item.type === 'transaction') {
-                if (Array.isArray(data)) {
-                    await db.transactions.bulkAdd(data);
-                } else if (data.items) {
-                    await db.transactions.bulkAdd(data.items);
-                } else {
-                    await db.transactions.add(data);
+            } else if (itemType === 'transaction' || itemType === 'invoice' || itemType === 'sale' || itemType === 'purchase') {
+                const itemsToRestore = Array.isArray(data) ? data : (data.items ? data.items : [data]);
+                for (const t of itemsToRestore) {
+                    if (!t) continue;
+                    const cleanT = typeof t === 'object' ? { ...t } : t;
+                    if (cleanT.id) delete cleanT.id;
+                    await db.transactions.add(cleanT);
+
+                    if (t.product && typeof productsDB !== 'undefined') {
+                        const p = productsDB.find(prod => prod.name === t.product || prod.id === t.productId || prod.id === t.product);
+                        if (p) {
+                            let factor = parseFloat(t.unitFactor) || 1;
+                            if (t.unit && p.units) {
+                                const u = p.units.find(u => u.unitName === t.unit);
+                                if (u) factor = parseFloat(u.factor) || 1;
+                            }
+                            const baseQty = (parseFloat(t.qty) || 0) * factor;
+                            const activeWH = t.warehouse || ((typeof currentUser !== 'undefined' && currentUser && currentUser.warehouseName) ? currentUser.warehouseName : 'المخزن الرئيسي');
+                            if (!p.warehouseStocks) p.warehouseStocks = {};
+                            const tType = t.type || '';
+
+                            if (tType.includes('مرتجع بيع')) {
+                                p.stock = (parseFloat(p.stock) || 0) + baseQty;
+                                p.warehouseStocks[activeWH] = (parseFloat(p.warehouseStocks[activeWH]) || 0) + baseQty;
+                            } else if (tType.includes('مرتجع شراء')) {
+                                p.stock = Math.max(0, (parseFloat(p.stock) || 0) - baseQty);
+                                p.warehouseStocks[activeWH] = Math.max(0, (parseFloat(p.warehouseStocks[activeWH]) || 0) - baseQty);
+                            } else if (tType.includes('بيع')) {
+                                p.stock = Math.max(0, (parseFloat(p.stock) || 0) - baseQty);
+                                p.warehouseStocks[activeWH] = Math.max(0, (parseFloat(p.warehouseStocks[activeWH]) || 0) - baseQty);
+                            } else if (tType.includes('شراء')) {
+                                p.stock = (parseFloat(p.stock) || 0) + baseQty;
+                                p.warehouseStocks[activeWH] = (parseFloat(p.warehouseStocks[activeWH]) || 0) + baseQty;
+                            } else if (tType.includes('تسوية')) {
+                                if (tType.includes('+')) {
+                                    p.stock = (parseFloat(p.stock) || 0) + baseQty;
+                                    p.warehouseStocks[activeWH] = (parseFloat(p.warehouseStocks[activeWH]) || 0) + baseQty;
+                                } else {
+                                    p.stock = Math.max(0, (parseFloat(p.stock) || 0) - baseQty);
+                                    p.warehouseStocks[activeWH] = Math.max(0, (parseFloat(p.warehouseStocks[activeWH]) || 0) - baseQty);
+                                }
+                            }
+                        }
+                    }
                 }
-                transactions = await db.transactions.toArray();
+                if (typeof db !== 'undefined' && db.products && typeof productsDB !== 'undefined' && productsDB.length > 0) {
+                    await db.products.bulkPut(productsDB);
+                }
+                window.transactions = await db.transactions.toArray();
                 if (typeof renderInvoicesTable === 'function') renderInvoicesTable();
-            } else if (item.type === 'account') {
-                await db.accounts.put(data);
+                if (typeof renderInventoryTable === 'function') renderInventoryTable();
+                if (typeof renderAccountsTable === 'function') renderAccountsTable();
+            } else if (itemType === 'account') {
+                const itemsToRestore = Array.isArray(data) ? data : [data];
+                for (const a of itemsToRestore) {
+                    if (!a) continue;
+                    const cleanA = typeof a === 'object' ? { ...a } : a;
+                    if (cleanA.id) delete cleanA.id;
+                    await db.accounts.add(cleanA);
+                }
                 window.accounts = await db.accounts.toArray();
                 if (typeof renderAccountsTable === 'function') renderAccountsTable();
+            } else if (itemType === 'warehouse' || itemType === 'مخزن') {
+                const savedWH = data.warehouse || data;
+                const savedStock = data.stock || [];
+
+                if (typeof warehouses !== 'undefined' && Array.isArray(warehouses)) {
+                    if (!warehouses.some(w => w.name === savedWH.name)) {
+                        warehouses.push(savedWH);
+                        if (typeof saveData === 'function') saveData();
+                    }
+                }
+
+                if (Array.isArray(savedStock) && savedStock.length > 0 && typeof productsDB !== 'undefined') {
+                    savedStock.forEach(st => {
+                        const p = productsDB.find(prod => prod.id === st.productId || prod.barcode === st.barcode);
+                        if (p) {
+                            if (!p.warehouseStocks) p.warehouseStocks = {};
+                            p.warehouseStocks[savedWH.name] = st.quantity;
+                        }
+                    });
+                    if (typeof db !== 'undefined' && db.products) {
+                        await db.products.bulkPut(productsDB);
+                    }
+                }
+
+                if (typeof renderWarehousesTable === 'function') renderWarehousesTable();
+                if (typeof updateSettingsWarehouseSelect === 'function') updateSettingsWarehouseSelect();
+                if (typeof renderInventoryTable === 'function') renderInventoryTable();
+            } else {
+                const itemsToRestore = Array.isArray(data) ? data : [data];
+                for (const obj of itemsToRestore) {
+                    if (!obj) continue;
+                    const cleanObj = typeof obj === 'object' ? { ...obj } : obj;
+                    if (cleanObj.id) delete cleanObj.id;
+                    if (db[itemType + 's']) await db[itemType + 's'].add(cleanObj);
+                    else if (db[itemType]) await db[itemType].add(cleanObj);
+                }
             }
 
             // الحذف من السلة بعد الاستعادة الناجحة
-            await db.trash.delete(id);
+            await db.trash.delete(Number(id) || id);
+            window.trashBin = window.trashBin.filter(x => String(x.id) !== String(id));
             await this.loadTrash();
 
-            showToast(`✅ تم استعادة "${item.label}" بنجاح`, "success");
+            showToast(`✅ تم استعادة "${item.label || 'العنصر'}" بنجاح`, "success");
         } catch (error) {
             console.error("فشل الاستعادة:", error);
             alert("❌ فشل استعادة العنصر: " + error.message);
@@ -184,6 +281,7 @@ const trashManager = {
                 onConfirm: async () => {
                     try {
                         await db.trash.clear();
+                        window.trashBin = [];
                         await this.loadTrash();
                         showToast("🧹 تم إفراغ السلة بنجاح", "success");
                     } catch (error) {
@@ -195,6 +293,7 @@ const trashManager = {
             if (!confirm("🚨 هل أنت متأكد من إفراغ سلة المحذوفات بالكامل؟\nسيتم حذف كافة العناصر نهائياً!")) return;
             try {
                 await db.trash.clear();
+                window.trashBin = [];
                 await this.loadTrash();
                 showToast("🧹 تم إفراغ السلة بنجاح", "success");
             } catch (error) {

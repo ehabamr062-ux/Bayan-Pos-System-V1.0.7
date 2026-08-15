@@ -24,142 +24,49 @@
     };
 })();
 
-// 2. Setup persistence and logic for Receipt & Disbursement checkboxes
-document.addEventListener('DOMContentLoaded', () => {
-    // Checkbox elements
-    const checkboxes = {
-        receiptPrint: document.getElementById('receiptPrintCheck'),
-        receiptClose: document.getElementById('receiptCloseCheck'),
-        disbursePrint: document.getElementById('disbursePrintCheck'),
-        disburseClose: document.getElementById('disburseCloseCheck')
-    };
+// 2. Setup robust persistence and logic for Receipt & Disbursement checkboxes using IndexedDB (bayanDB.settings via getStore/setStore)
+window.syncReceiptDisburseCheckboxes = function() {
+    const keys = [
+        { id: 'receiptPrintCheck', key: 'bayan_receiptPrint' },
+        { id: 'receiptCloseCheck', key: 'bayan_receiptClose' },
+        { id: 'disbursePrintCheck', key: 'bayan_disbursePrint' },
+        { id: 'disburseCloseCheck', key: 'bayan_disburseClose' }
+    ];
 
-    // Load persisted states from localStorage
-    Object.keys(checkboxes).forEach(key => {
-        const checkbox = checkboxes[key];
-        if (checkbox) {
-            const savedState = localStorage.getItem('bayan_' + key);
-            if (savedState !== null) {
-                checkbox.checked = savedState === 'true';
-            }
-            
-            // Save state on change
-            checkbox.addEventListener('change', () => {
-                localStorage.setItem('bayan_' + key, checkbox.checked);
+    keys.forEach(item => {
+        const el = document.getElementById(item.id);
+        if (!el) return;
+
+        let val = null;
+        if (typeof getStore === 'function') {
+            val = getStore(item.key);
+        }
+        if ((val === null || val === undefined) && typeof localStorage !== 'undefined') {
+            val = localStorage.getItem(item.key);
+        }
+
+        if (val !== null && val !== undefined) {
+            el.checked = (val === 'true' || val === true);
+        }
+
+        if (!el.dataset.boundListener) {
+            el.dataset.boundListener = 'true';
+            el.addEventListener('change', () => {
+                const isChecked = el.checked;
+                if (typeof setStore === 'function') {
+                    setStore(item.key, isChecked);
+                }
+                if (typeof localStorage !== 'undefined') {
+                    localStorage.setItem(item.key, String(isChecked));
+                }
             });
         }
     });
+};
 
-    // 3. Hook saveReceipt
-    if (typeof window.saveReceipt === 'function') {
-        const originalSaveReceipt = window.saveReceipt;
-        window.saveReceipt = async function(...args) {
-            // Read input values before saveReceipt clears them
-            const amount = parseFloat(document.getElementById('receiptAmount').value) || 0;
-            const customer = document.getElementById('receiptCustomer').value;
-            const notes = document.getElementById('receiptNotes') ? document.getElementById('receiptNotes').value : '';
-            const type = document.getElementById('receiptType').value;
-            const date = document.getElementById('receiptDate').value;
-            const time = document.getElementById('receiptTime').value;
-            const receiptID = document.getElementById('receiptID').value;
-
-            const isPrintChecked = checkboxes.receiptPrint ? checkboxes.receiptPrint.checked : false;
-            const isCloseChecked = checkboxes.receiptClose ? checkboxes.receiptClose.checked : false;
-
-            // Run original saveReceipt
-            const success = await originalSaveReceipt.apply(this, args);
-
-            // If transaction was successfully saved (original returns true or amount/customer was valid)
-            if (amount > 0 && customer) {
-                if (isPrintChecked) {
-                    setTimeout(() => {
-                        // Temporarily restore input values so printReceiptData() can read them
-                        document.getElementById('receiptAmount').value = amount;
-                        document.getElementById('receiptCustomer').value = customer;
-                        if (document.getElementById('receiptNotes')) document.getElementById('receiptNotes').value = notes;
-                        document.getElementById('receiptType').value = type;
-                        document.getElementById('receiptDate').value = date;
-                        document.getElementById('receiptTime').value = time;
-                        document.getElementById('receiptID').value = receiptID;
-
-                        // Trigger printing
-                        if (typeof printReceiptData === 'function') {
-                            printReceiptData();
-                        }
-
-                        // Clear inputs back to normal
-                        if (typeof resetReceipt === 'function') {
-                            resetReceipt();
-                        }
-                    }, 500);
-                }
-
-                if (isCloseChecked) {
-                    setTimeout(() => {
-                        if (typeof switchSection === 'function') {
-                            switchSection('dashboard');
-                        }
-                    }, 650);
-                }
-            }
-            return success;
-        };
-    }
-
-    // 4. Hook saveDisbursement
-    if (typeof window.saveDisbursement === 'function') {
-        const originalSaveDisbursement = window.saveDisbursement;
-        window.saveDisbursement = async function(...args) {
-            // Read input values before saveDisbursement clears them
-            const amount = parseFloat(document.getElementById('disburseAmount').value) || 0;
-            const payee = document.getElementById('disbursePayee').value;
-            const notes = document.getElementById('disburseNotes') ? document.getElementById('disburseNotes').value : '';
-            const type = document.getElementById('disburseType').value;
-            const date = document.getElementById('disburseDate').value;
-            const time = document.getElementById('disburseTime').value;
-            const disburseID = document.getElementById('disburseID').value;
-
-            const isPrintChecked = checkboxes.disbursePrint ? checkboxes.disbursePrint.checked : false;
-            const isCloseChecked = checkboxes.disburseClose ? checkboxes.disburseClose.checked : false;
-
-            // Run original saveDisbursement
-            const success = await originalSaveDisbursement.apply(this, args);
-
-            // If transaction was successfully saved
-            if (amount > 0 && payee) {
-                if (isPrintChecked) {
-                    setTimeout(() => {
-                        // Temporarily restore input values so printDisbursementData() can read them
-                        document.getElementById('disburseAmount').value = amount;
-                        document.getElementById('disbursePayee').value = payee;
-                        if (document.getElementById('disburseNotes')) document.getElementById('disburseNotes').value = notes;
-                        document.getElementById('disburseType').value = type;
-                        document.getElementById('disburseDate').value = date;
-                        document.getElementById('disburseTime').value = time;
-                        document.getElementById('disburseID').value = disburseID;
-
-                        // Trigger printing
-                        if (typeof printDisbursementData === 'function') {
-                            printDisbursementData();
-                        }
-
-                        // Clear inputs back to normal
-                        if (typeof resetDisbursement === 'function') {
-                            resetDisbursement();
-                        }
-                    }, 500);
-                }
-
-                if (isCloseChecked) {
-                    setTimeout(() => {
-                        if (typeof switchSection === 'function') {
-                            switchSection('dashboard');
-                        }
-                    }, 650);
-                }
-            }
-            return success;
-        };
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof window.syncReceiptDisburseCheckboxes === 'function') {
+        window.syncReceiptDisburseCheckboxes();
     }
 });
 
@@ -520,4 +427,58 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, true);
 })();
+
+/**
+ * تصدير احترافي لسندات القبض والصرف إلى Excel & PDF يشمل كافة البيانات الفعلية للسند
+ */
+function exportVoucherToExcel(voucherType = 'receipt') {
+    const isReceipt = voucherType === 'receipt';
+    const title = isReceipt ? 'سند قبض' : 'سند صرف';
+    
+    const id = isReceipt ? (document.getElementById('receiptID')?.value || '1') : (document.getElementById('disburseID')?.value || '1');
+    const partner = isReceipt ? (document.getElementById('receiptCustomer')?.value || '-') : (document.getElementById('disbursePayee')?.value || '-');
+    const amount = isReceipt ? (document.getElementById('receiptAmount')?.value || '0.00') : (document.getElementById('disburseAmount')?.value || '0.00');
+    const notes = isReceipt ? (document.getElementById('receiptNotes')?.value || '-') : (document.getElementById('disburseNotes')?.value || '-');
+    const dateStr = isReceipt ? (document.getElementById('receiptDate')?.value || new Date().toISOString().slice(0,10)) : (document.getElementById('disburseDate')?.value || new Date().toISOString().slice(0,10));
+    const timeStr = isReceipt ? (document.getElementById('receiptTime')?.value || new Date().toTimeString().slice(0,5)) : (document.getElementById('disburseTime')?.value || new Date().toTimeString().slice(0,5));
+    
+    const dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+    const d = new Date(dateStr);
+    const dayName = isNaN(d.getDay()) ? '-' : dayNames[d.getDay()];
+    const userName = (typeof currentUser !== 'undefined' && currentUser) ? currentUser.name : 'المدير العام';
+
+    const XLSXLib = (typeof getXLSXLibrary === 'function' ? getXLSXLibrary() : (typeof XLSX !== 'undefined' ? XLSX : null));
+    if (XLSXLib) {
+        const data = [
+            {
+                "رقم السند": id,
+                "نوع العملية": title,
+                "استلمنا من / صُرف لـ": partner,
+                "المبلغ (ج.م)": parseFloat(amount) || 0,
+                "اليوم": dayName,
+                "التاريخ": dateStr,
+                "الوقت": timeStr,
+                "البيان / الملاحظات": notes,
+                "المستخدم المسؤول": userName
+            }
+        ];
+
+        const ws = XLSXLib.utils.json_to_sheet(data);
+        ws['!dir'] = 'rtl';
+        const wb = XLSXLib.utils.book_new();
+        XLSXLib.utils.book_append_sheet(wb, ws, title);
+        XLSXLib.writeFile(wb, `${title}_${id}.xlsx`);
+    } else {
+        let csv = "\uFEFFرقم السند,نوع العملية,الجهة / الحساب,المبلغ,اليوم,التاريخ,الوقت,البيان,المستخدم\n";
+        csv += `"${id}","${title}","${partner}","${amount}","${dayName}","${dateStr}","${timeStr}","${notes}","${userName}"\n`;
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${title}_${id}.csv`;
+        link.click();
+    }
+    
+    if (typeof showToast === 'function') showToast(`✅ تم تصدير ${title} إلى ملف Excel بنجاح`, 'success');
+}
+
 
