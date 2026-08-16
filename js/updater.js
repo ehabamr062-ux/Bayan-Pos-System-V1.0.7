@@ -11,11 +11,12 @@
 (function initAutoUpdater() {
     if (typeof window === 'undefined') return;
 
-    // بيانات المستودع المربوط على GitHub Releases
+    // بيانات المستودع المربوط على GitHub Releases والرسائل السحابية
     const GITHUB_REPO_OWNER = 'ehabamr062-ux';
     const GITHUB_REPO_NAME = 'Bayan-Pos-System';
     const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`;
     const GITHUB_RELEASES_PAGE = `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`;
+    const GITHUB_BROADCAST_URL = `https://raw.githubusercontent.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/main/announcements.json`;
 
     let ipcRenderer = null;
     try {
@@ -231,7 +232,7 @@
     // حالة نظام التحديث
     // =========================================================================
     const state = {
-        currentVersion: '1.0.7',
+        currentVersion: '1.0.8',
         latestVersion: null,
         releaseNotes: '',
         downloadUrl: '',
@@ -260,7 +261,7 @@
     }
 
     function getCurrentAppVersion() {
-        return window.appVersion || '1.0.7';
+        return window.appVersion || '1.0.8';
     }
 
     function fmtNotes(notes) {
@@ -451,10 +452,28 @@
 
         if (ipcRenderer) {
             try {
+                if (isManual && typeof showToast === 'function') {
+                    showToast("🔍 جاري التحقق من وجود تحديثات جديدة عبر السيرفر...");
+                }
                 const res = await ipcRenderer.invoke('check-for-updates');
                 if (res && res.success) {
-                    if (isManual && typeof showToast === 'function') {
-                        showToast("🔍 جاري التحقق من وجود تحديثات جديدة عبر السيرفر...");
+                    if (res.updateInfo) {
+                        const newVer = (res.updateInfo.version || '').replace(/^v+/i, '');
+                        if (isNewerVersion(newVer, state.currentVersion)) {
+                            return res;
+                        }
+                    }
+                    // إذا كان أحدث إصدار مسجل
+                    if (isManual) {
+                        if (typeof showCustomAlert === 'function') {
+                            showCustomAlert({
+                                titleText: '✅ نظامك محدث بالكامل',
+                                msg: `أنت تستخدم حالياً أحدث إصدار مستقر من بَيَان POS.\nرقم الإصدار المثبت لديك: v${state.currentVersion}`,
+                                type: 'success'
+                            });
+                        } else if (typeof showToast === 'function') {
+                            showToast(`✅ أنت تستخدم أحدث إصدار مثبت v${state.currentVersion}`, 'success');
+                        }
                     }
                     return res;
                 }
@@ -663,11 +682,112 @@
     }
 
     // =========================================================================
+    // 📢 نظام الإشعارات والرسائل السحابية الحية (Live Cloud Announcements)
+    // =========================================================================
+    window.latestCloudAnnouncement = null;
+    window.cloudAnnouncementsHistory = [];
+
+    // تحميل سجل الإشعارات السحابية السابقة
+    try {
+        const storedAnn = getStore('bayan_cloud_announcements_history') || localStorage.getItem('bayan_cloud_announcements_history');
+        window.cloudAnnouncementsHistory = storedAnn ? JSON.parse(storedAnn) : [];
+    } catch(e) { window.cloudAnnouncementsHistory = []; }
+
+    window.checkCloudAnnouncements = async function () {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
+            const res = await fetch(GITHUB_BROADCAST_URL + '?t=' + Date.now(), { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || !data.message) return;
+
+            window.latestCloudAnnouncement = data;
+
+            // حفظ الإشعار في سجل التاريخ السحابي إذا لم يكن موجوداً مسبقاً
+            const existingIdx = window.cloudAnnouncementsHistory.findIndex(a => a.id === data.id);
+            if (existingIdx >= 0) {
+                window.cloudAnnouncementsHistory[existingIdx] = { ...data, updatedAt: new Date().toISOString() };
+            } else {
+                window.cloudAnnouncementsHistory.unshift({ ...data, receivedAt: new Date().toISOString() });
+            }
+
+            const historyStr = JSON.stringify(window.cloudAnnouncementsHistory);
+            setStore('bayan_cloud_announcements_history', historyStr);
+            localStorage.setItem('bayan_cloud_announcements_history', historyStr);
+
+            if (!data.active) return;
+
+            const seenKey = 'bayan_seen_count_' + (data.id || 'default');
+            const viewCount = parseInt(localStorage.getItem(seenKey) || '0', 10);
+            
+            // تحديد الحد الأقصى لعدد مرات الظهور (افتراضياً 4 مرات إذا لم يحدد في الملف)
+            const maxViews = data.alwaysShow ? Infinity : (data.maxViews !== undefined ? parseInt(data.maxViews, 10) : 4);
+
+            if (viewCount >= maxViews) return;
+
+            // عرض نافذة الإشعار السحابي
+            setTimeout(() => {
+                showCloudBroadcastModal(data, seenKey, viewCount);
+            }, 2500);
+        } catch (e) {
+            // صامت في حالة عدم وجود إنترنت
+        }
+    };
+
+    function showCloudBroadcastModal(data, seenKey, currentCount = 0) {
+        if (document.getElementById('bayan-broadcast-overlay')) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'bayan-broadcast-overlay';
+        overlay.style.cssText = `
+            position: fixed; inset: 0; background: rgba(10, 10, 24, 0.8);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            z-index: 9999998; display: flex; align-items: center; justify-content: center;
+            animation: updaterFadeIn 0.3s ease; direction: rtl; font-family: 'Cairo', 'Segoe UI', sans-serif;
+        `;
+
+        const icon = data.icon || '🎉';
+        const title = data.title || 'إشعار من إدارة نظام بيان POS';
+        const message = data.message || '';
+        const link = data.link || '';
+        const linkText = data.linkText || 'معرفة المزيد 🔗';
+
+        overlay.innerHTML = `
+            <div style="background: linear-gradient(145deg, #1e113a, #0f172a); border: 2px solid rgba(212, 175, 55, 0.6); border-radius: 26px; padding: 32px 36px; width: 500px; max-width: 92vw; box-shadow: 0 25px 60px rgba(0,0,0,0.8), 0 0 30px rgba(212, 175, 55, 0.25); position: relative; color: white;">
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px; border-bottom: 1.5px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
+                    <div style="width: 52px; height: 52px; background: linear-gradient(135deg, #d4af37, #b45309); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 8px 20px rgba(212, 175, 55, 0.35);">
+                        ${icon}
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.3rem; font-weight: 900; color: #fde047;">${title}</h3>
+                        <p style="margin: 4px 0 0; font-size: 0.85rem; color: #cbd5e1; font-weight: 700;">رسالة مباشرة من فريق التطوير</p>
+                    </div>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.06); border-radius: 16px; padding: 18px 20px; font-size: 0.98rem; font-weight: 700; line-height: 1.8; color: #f8fafc; margin-bottom: 22px; border: 1px solid rgba(255,255,255,0.1); white-space: pre-line;">
+                    ${message}
+                </div>
+
+                <div style="display: flex; gap: 12px;">
+                    ${link ? `<button onclick="window.open('${link}', '_blank'); document.getElementById('bayan-broadcast-overlay').remove(); localStorage.setItem('${seenKey}', '${currentCount + 1}');" style="flex:1; padding: 12px; background: linear-gradient(135deg, #10b981, #059669); color:white; border:none; border-radius:12px; font-weight:900; cursor:pointer; font-size:0.95rem;">${linkText}</button>` : ''}
+                    <button onclick="document.getElementById('bayan-broadcast-overlay').remove(); localStorage.setItem('${seenKey}', '${currentCount + 1}');" style="flex:1; padding: 12px; background: rgba(255,255,255,0.15); color:white; border:1px solid rgba(255,255,255,0.25); border-radius:12px; font-weight:900; cursor:pointer; font-size:0.95rem;">إغلاق ✅</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+    }
+
+    // =========================================================================
     // 🔔 التشغيل التلقائي عند فتح التطبيق (Auto Check on Startup)
     // =========================================================================
     const autoCheck = () => {
         setTimeout(() => {
             window.checkGitHubReleases(false);
+            window.checkCloudAnnouncements();
         }, 3000);
     };
 
@@ -677,5 +797,5 @@
         document.addEventListener('DOMContentLoaded', autoCheck);
     }
 
-    console.log('✅ Bayan Auto Updater (GitHub Releases Integrated): Loaded successfully.');
+    console.log('✅ Bayan Auto Updater & Cloud Announcements (GitHub Releases Integrated): Loaded successfully.');
 })();

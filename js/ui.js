@@ -2494,7 +2494,7 @@ data.forEach(store => {
             else editor.classList.add('hidden');
         }
 
-        window.showNotificationsModal = function(activeTab = 'new') {
+        window.showNotificationsModal = function(activeTab = 'products') {
             const today = new Date();
             const allLowStock = productsDB.filter(p => (parseFloat(p.stock) || 0) <= (parseFloat(p.minStock) || 5));
             const allDebtAccounts = accounts.filter(a => {
@@ -2505,20 +2505,20 @@ data.forEach(store => {
                 return (a.type === 'client' || a.type === 'mixed') && balance > 0 && isRemindActive;
             });
 
-            // العملاء المتأخرين (رصيد > 0 وآخر عملية من أكتر من 30 يوم)
+            // العملاء المتأخرين (رصيد > 0 وآخر عملية من أكثر من 30 يوم)
             const allDelayed = accounts.filter(a => {
                 const balance = (parseFloat(a.debit) || 0) - (parseFloat(a.credit) || 0);
                 if (!((a.type === 'client' || a.type === 'mixed') && balance > 0)) return false;
                 const isRemindActive = (a.remind === true || a.remind === 'true');
                 if (!isRemindActive) return false;
                 const lastTrans = transactions.filter(t => t.partnerId === a.id || t.account === a.name).sort((x, y) => new Date(y.date || y.timestamp) - new Date(x.date || x.timestamp))[0];
-                if (!lastTrans) return true; // الحسابات المدينة التي ليس لها حركات حديثة تعتبر متأخرة
+                if (!lastTrans) return true;
                 const lastDate = new Date(lastTrans.date || lastTrans.timestamp);
                 const diffDays = Math.ceil((today - lastDate) / (1000 * 60 * 60 * 24));
                 return diffDays > 30;
             });
 
-            // تقسيمهم لنشط ومستلم
+            // تقسيم البضاعة والحسابات إلى نشط ومستلم
             const activeLowStock = allLowStock.filter(p => !window.acknowledgedLowStock.includes(p.id));
             const archivedLowStock = allLowStock.filter(p => window.acknowledgedLowStock.includes(p.id));
 
@@ -2528,7 +2528,9 @@ data.forEach(store => {
             const activeDelayed = allDelayed.filter(a => !window.acknowledgedDelayed.includes(a.id));
             const archivedDelayed = allDelayed.filter(a => window.acknowledgedDelayed.includes(a.id));
 
-            const totalActiveCount = activeLowStock.length + activeDebt.length + activeDelayed.length;
+            const activeAccountsTotal = activeDebt.length + activeDelayed.length;
+            const totalActiveCount = activeLowStock.length + activeAccountsTotal;
+            const totalArchivedCount = archivedLowStock.length + archivedDebt.length + archivedDelayed.length;
 
             const createRows = (items, type, isArchived) => items.map(item => {
                 const isProd = type === 'low-stock';
@@ -2538,42 +2540,47 @@ data.forEach(store => {
                 let extra = "";
 
                 if (isProd) {
-                    value = item.stock;
+                    value = `<span style="font-size:1.1rem; font-weight:900; color:#ef4444; direction:ltr; display:inline-block;">${item.stock}</span> <span style="font-size:0.75rem; color:#64748b;">(الحد: ${item.minStock || 5})</span>`;
                 } else {
                     const balance = (parseFloat(item.debit) || 0) - (parseFloat(item.credit) || 0);
-                    value = balance.toFixed(2);
+                    value = `<span style="font-size:1.05rem; font-weight:900; color:#e11d48; direction:ltr; display:inline-block;">${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>`;
                     if (isDelayed) {
                         const lastTrans = transactions.filter(t => t.partnerId === item.id || t.account === item.name).sort((x, y) => new Date(y.date || y.timestamp) - new Date(x.date || x.timestamp))[0];
                         if (lastTrans) {
                             const lastDate = new Date(lastTrans.date || lastTrans.timestamp);
                             const diffDays = Math.ceil((today - lastDate) / (1000 * 60 * 60 * 24));
-                            extra = `<br><span style="font-size:0.75rem; color:#64748b; font-weight:bold;">آخر عملية منذ ${diffDays} يوم</span>`;
+                            extra = `<br><span style="font-size:0.75rem; color:#b45309; font-weight:bold;">⏳ متأخر منذ ${diffDays} يوم</span>`;
                         } else {
-                            extra = `<br><span style="font-size:0.75rem; color:#dc2626; font-weight:bold;">متأخر عن السداد (لا توجد دفعات)</span>`;
+                            extra = `<br><span style="font-size:0.75rem; color:#dc2626; font-weight:bold;">⏳ متأخر عن السداد (لا توجد دفعات)</span>`;
                         }
                     }
                 }
 
                 return `
-                <tr style="border-bottom: 1px solid #f1f5f9; transition: 0.2s;">
-                    <td style="padding: 14px 12px; font-weight: bold; color: #1e293b; text-align: right;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-size:1.1rem;">${isProd ? '📦' : (isDelayed ? '⏳' : '💳')}</span>
-                            <div>${name}${extra}</div>
+                <tr style="border-bottom: 1px solid #f1f5f9; transition: 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                    <td style="padding: 12px 14px; font-weight: bold; color: #1e293b; text-align: right;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="font-size:1.2rem;">${isProd ? '📦' : (isDelayed ? '⚠️' : '💳')}</span>
+                            <div>
+                                <div style="font-weight:900; font-size:0.95rem; color:#0f172a;">${name}</div>
+                                ${extra}
+                            </div>
                         </div>
                     </td>
-                    <td style="padding: 14px 12px; color: ${isProd ? '#ef4444' : (isDelayed ? '#b45309' : '#e11d48')}; font-weight: 900; text-align: center;">${value}</td>
-                    <td style="padding: 14px 12px; text-align: center;">
+                    <td style="padding: 12px 14px; font-weight: 900; text-align: center;">${value}</td>
+                    <td style="padding: 12px 14px; text-align: center;">
                         ${!isArchived ? `
-                            <div style="display:flex; gap:8px; justify-content:center;">
-                                ${!isProd ? `<button class="tool-btn" style="background:#3b82f6; color:white; border-radius:8px; border:none; padding: 6px 12px; font-weight:bold; cursor:pointer;" onclick="openStatementFromNotify('${item.id}')" title="كشف حساب">📄 كشف</button>` : ''}
-                                <button class="tool-btn" style="background:#10b981; color:white; border-radius:8px; padding: 6px 15px; font-size: 0.8rem; font-weight: 900; border: none; cursor: pointer;" 
-                                        onclick="acknowledgeNotification('${type}', ${isProd ? item.id : `'${item.id}'` })">استلام ✅</button>
+                            <div style="display:flex; gap:6px; justify-content:center; align-items:center;">
+                                ${!isProd ? `<button class="tool-btn" style="background:#3b82f6; color:white; border-radius:8px; border:none; padding: 6px 12px; font-weight:800; font-size:0.8rem; cursor:pointer;" onclick="openStatementFromNotify('${item.id}')" title="عرض كشف حساب العميل">📄 كشف</button>` : ''}
+                                <button class="tool-btn" style="background:linear-gradient(135deg, #10b981, #059669); color:white; border-radius:8px; padding: 6px 14px; font-size: 0.8rem; font-weight: 900; border: none; cursor: pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 6px rgba(16,185,129,0.3);" 
+                                        onclick="acknowledgeNotification('${type}', ${isProd ? item.id : `'${item.id}'` }, '${activeTab}')" title="تأكيد الاستلام ونقله لسجل الاستلام">
+                                    <span style="font-size:0.9rem;">✔️</span> استلام
+                                </button>
                             </div>
                         ` : `
                             <div style="display:flex; gap:8px; justify-content:center; align-items:center;">
-                                <span style="color: #10b981; font-weight: 900; font-size: 0.85rem;">✔️ تم الاستلام</span>
-                                <button class="tool-btn" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; border-radius:8px; padding:4px 10px; font-size:0.75rem; font-weight:bold; cursor:pointer;" onclick="unacknowledgeNotification('${type}', ${isProd ? item.id : `'${item.id}'` })">إعادة 🔄</button>
+                                <span style="color: #10b981; font-weight: 900; font-size: 0.85rem;">✔️ مستلم</span>
+                                <button class="tool-btn" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; border-radius:8px; padding:4px 10px; font-size:0.75rem; font-weight:bold; cursor:pointer;" onclick="unacknowledgeNotification('${type}', ${isProd ? item.id : `'${item.id}'` })" title="إعادة التنبيه إلى القائمة النشطة">إعادة 🔄</button>
                             </div>
                         `}
                     </td>
@@ -2582,65 +2589,99 @@ data.forEach(store => {
 
             const existingModal = document.getElementById('notifyModal');
             const modalContent = `
-                <div class="glass-card-premium" style="background: #ffffff; border: 1px solid #e2e8f0; padding: 0; border-radius: 20px; width: 720px; max-width: 95%; max-height: 85vh; overflow: hidden; box-shadow: 0 25px 60px rgba(15, 23, 42, 0.15); display: flex; flex-direction: column; direction: rtl; font-family: inherit;">
+                <div class="glass-card-premium" style="background: #ffffff; border: 1px solid #e2e8f0; padding: 0; border-radius: 22px; width: 780px; max-width: 95%; max-height: 88vh; overflow: hidden; box-shadow: 0 30px 70px rgba(15, 23, 42, 0.2); display: flex; flex-direction: column; direction: rtl; font-family: inherit;">
 
                     <!-- Header -->
-                    <div style="background: linear-gradient(135deg, #f8fafc, #f1f5f9); padding: 20px 25px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-                        <h3 style="margin:0; color:#0f172a; font-size: 1.3rem; font-weight: 900; display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 1.5rem;">🔔</span> مركز إدارة التنبيهات والديون
+                    <div style="background: linear-gradient(135deg, #0f172a, #1e293b); padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; color: white;">
+                        <h3 style="margin:0; font-size: 1.25rem; font-weight: 900; display: flex; align-items: center; gap: 10px; color: #f8fafc;">
+                            <span style="font-size: 1.4rem;">🔔</span> مركز إدارة التنبيهات والديون والإشعارات
                         </h3>
-                        <button onclick="document.getElementById('notifyModal').remove()" style="background: #e2e8f0; border: none; color: #475569; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; font-weight: bold; transition: 0.2s;" onmouseover="this.style.background='#cbd5e1'" onmouseout="this.style.background='#e2e8f0'">&times;</button>
+                        <button onclick="document.getElementById('notifyModal').remove()" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; font-weight: bold; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.12)'">&times;</button>
                     </div>
 
-                    <!-- Custom Tabs -->
-                    <div style="display: flex; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                        <div onclick="showNotificationsModal('new')" style="flex: 1; padding: 15px; text-align: center; cursor: pointer; font-weight: 900; transition: 0.3s; border-bottom: 3px solid ${activeTab === 'new' ? '#3b82f6' : 'transparent'}; color: ${activeTab === 'new' ? '#3b82f6' : '#64748b'}; background: ${activeTab === 'new' ? 'rgba(59, 130, 246, 0.04)' : 'transparent'};">
-                            التنبيهات الجديدة (${totalActiveCount})
+                    <!-- Custom Tabs (4 تبويبات مخصصة) -->
+                    <div style="display: flex; background: #f8fafc; border-bottom: 1.5px solid #e2e8f0; overflow-x: auto;">
+                        <div onclick="showNotificationsModal('products')" style="flex: 1; min-width: 130px; padding: 14px 8px; text-align: center; cursor: pointer; font-weight: 900; font-size: 0.92rem; transition: 0.25s; border-bottom: 3px solid ${activeTab === 'products' ? '#10b981' : 'transparent'}; color: ${activeTab === 'products' ? '#047857' : '#64748b'}; background: ${activeTab === 'products' ? 'rgba(16, 185, 129, 0.08)' : 'transparent'};">
+                            📦 نواقص البضاعة <span style="background:${activeLowStock.length > 0 ? '#ef4444' : '#e2e8f0'}; color:${activeLowStock.length > 0 ? '#fff' : '#64748b'}; font-size:0.75rem; padding:2px 7px; border-radius:12px; margin-right:4px;">${activeLowStock.length}</span>
                         </div>
-                        <div onclick="showNotificationsModal('archived')" style="flex: 1; padding: 15px; text-align: center; cursor: pointer; font-weight: 900; transition: 0.3s; border-bottom: 3px solid ${activeTab === 'archived' ? '#3b82f6' : 'transparent'}; color: ${activeTab === 'archived' ? '#3b82f6' : '#64748b'}; background: ${activeTab === 'archived' ? 'rgba(59, 130, 246, 0.04)' : 'transparent'};">
-                            سجل الاستلام (${archivedLowStock.length + archivedDebt.length + archivedDelayed.length})
+                        <div onclick="showNotificationsModal('accounts')" style="flex: 1; min-width: 130px; padding: 14px 8px; text-align: center; cursor: pointer; font-weight: 900; font-size: 0.92rem; transition: 0.25s; border-bottom: 3px solid ${activeTab === 'accounts' ? '#3b82f6' : 'transparent'}; color: ${activeTab === 'accounts' ? '#1d4ed8' : '#64748b'}; background: ${activeTab === 'accounts' ? 'rgba(59, 130, 246, 0.08)' : 'transparent'};">
+                            💳 تنبيهات الحسابات <span style="background:${activeAccountsTotal > 0 ? '#ef4444' : '#e2e8f0'}; color:${activeAccountsTotal > 0 ? '#fff' : '#64748b'}; font-size:0.75rem; padding:2px 7px; border-radius:12px; margin-right:4px;">${activeAccountsTotal}</span>
+                        </div>
+                        <div onclick="showNotificationsModal('archived')" style="flex: 1; min-width: 130px; padding: 14px 8px; text-align: center; cursor: pointer; font-weight: 900; font-size: 0.92rem; transition: 0.25s; border-bottom: 3px solid ${activeTab === 'archived' ? '#f59e0b' : 'transparent'}; color: ${activeTab === 'archived' ? '#b45309' : '#64748b'}; background: ${activeTab === 'archived' ? 'rgba(245, 158, 11, 0.08)' : 'transparent'};">
+                            📁 سجل الاستلام <span style="background:#e2e8f0; color:#475569; font-size:0.75rem; padding:2px 7px; border-radius:12px; margin-right:4px;">${totalArchivedCount}</span>
+                        </div>
+                        <div onclick="showNotificationsModal('cloud')" style="flex: 1; min-width: 140px; padding: 14px 8px; text-align: center; cursor: pointer; font-weight: 900; font-size: 0.92rem; transition: 0.25s; border-bottom: 3px solid ${activeTab === 'cloud' ? '#8b5cf6' : 'transparent'}; color: ${activeTab === 'cloud' ? '#6d28d9' : '#64748b'}; background: ${activeTab === 'cloud' ? 'rgba(139, 92, 246, 0.08)' : 'transparent'};">
+                            ☁️ الإشعارات السحابية ${window.latestCloudAnnouncement && window.latestCloudAnnouncement.active ? '<span style="background:#ef4444; width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:3px;"></span>' : ''}
                         </div>
                     </div>
 
                     <!-- Content Area -->
-                    <div style="padding: 20px 25px; flex: 1; overflow-y: auto; background: #fff;">
-                        ${activeTab === 'new' ? `
-                            ${(totalActiveCount === 0) ? `
-                                <div style="text-align: center; padding: 50px; color: #64748b;">
-                                    <div style="font-size: 3.5rem; margin-bottom: 15px;">🎉</div>
-                                    <div style="font-weight: 900; font-size: 1.2rem; color: #0f172a;">كل شيء جاهز ومستقر!</div>
-                                    <div style="font-size: 0.9rem; margin-top: 5px; color: #64748b;">لا توجد تنبيهات جديدة أو ديون متأخرة حالياً.</div>
+                    <div style="padding: 20px 24px; flex: 1; overflow-y: auto; background: #fff; min-height: 280px;">
+                        ${activeTab === 'products' ? `
+                            ${(activeLowStock.length === 0) ? `
+                                <div style="text-align: center; padding: 45px 20px; color: #64748b;">
+                                    <div style="font-size: 3.2rem; margin-bottom: 12px;">🎉</div>
+                                    <div style="font-weight: 900; font-size: 1.15rem; color: #0f172a;">مخزون البضاعة مكتمل ومستقر!</div>
+                                    <div style="font-size: 0.88rem; margin-top: 5px; color: #64748b;">لا توجد أصناف وصلت للحد الأدنى للنواقص أو بحاجة لطلب حالياً.</div>
                                 </div>
                             ` : `
+                                <div style="margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center;">
+                                    <span style="font-size:0.85rem; font-weight:800; color:#475569;">الأصناف التي قاربت على النفاد (اضغط "استلام" لتأكيد المراجعة ونقلها للأرشيف):</span>
+                                    <button onclick="acknowledgeAllProductsNotifications()" style="padding: 6px 14px; background: #10b981; color: white; border: none; border-radius: 8px; font-weight: 900; font-size: 0.8rem; cursor: pointer;">✔️ استلام جميع نواقص البضاعة</button>
+                                </div>
                                 <table class="report-table" style="width:100%; border-collapse:collapse; color: #1e293b;">
                                     <thead>
                                         <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-                                            <th style="text-align:right; padding:12px; color: #475569; font-weight: 900;">البيان / العميل / الصنف</th>
-                                            <th style="padding:12px; color: #475569; font-weight: 900; text-align:center;">القيمة / الرصيد</th>
-                                            <th style="padding:12px; color: #475569; font-weight: 900; text-align:center;">الإجراء</th>
+                                            <th style="text-align:right; padding:10px 12px; color: #475569; font-weight: 900;">اسم الصنف</th>
+                                            <th style="padding:10px 12px; color: #475569; font-weight: 900; text-align:center;">الكمية الحالية</th>
+                                            <th style="padding:10px 12px; color: #475569; font-weight: 900; text-align:center;">تأكيد الاستلام</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         ${createRows(activeLowStock, 'low-stock', false)}
+                                    </tbody>
+                                </table>
+                            `}
+                        ` : activeTab === 'accounts' ? `
+                            ${(activeAccountsTotal === 0) ? `
+                                <div style="text-align: center; padding: 45px 20px; color: #64748b;">
+                                    <div style="font-size: 3.2rem; margin-bottom: 12px;">✅</div>
+                                    <div style="font-weight: 900; font-size: 1.15rem; color: #0f172a;">حسابات العملاء منتظمة!</div>
+                                    <div style="font-size: 0.88rem; margin-top: 5px; color: #64748b;">لا توجد تنبيهات ديون نشطة أو حسابات متأخرة مسجلة للتذكير.</div>
+                                </div>
+                            ` : `
+                                <div style="margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center;">
+                                    <span style="font-size:0.85rem; font-weight:800; color:#475569;">العملاء الذين عليهم مديونيات أو متأخرين عن السداد:</span>
+                                    <button onclick="acknowledgeAllAccountsNotifications()" style="padding: 6px 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: 900; font-size: 0.8rem; cursor: pointer;">✔️ استلام جميع تنبيهات الحسابات</button>
+                                </div>
+                                <table class="report-table" style="width:100%; border-collapse:collapse; color: #1e293b;">
+                                    <thead>
+                                        <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                            <th style="text-align:right; padding:10px 12px; color: #475569; font-weight: 900;">اسم الحساب / العميل</th>
+                                            <th style="padding:10px 12px; color: #475569; font-weight: 900; text-align:center;">المبلغ المستحق</th>
+                                            <th style="padding:10px 12px; color: #475569; font-weight: 900; text-align:center;">الإجراء</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         ${createRows(activeDebt, 'debt', false)}
                                         ${createRows(activeDelayed, 'delayed', false)}
                                     </tbody>
                                 </table>
                             `}
-                        ` : `
-                            ${(archivedLowStock.length === 0 && archivedDebt.length === 0 && archivedDelayed.length === 0) ? `
-                                <div style="text-align: center; padding: 50px; color: #64748b;">
-                                    <div style="font-size: 3.5rem; margin-bottom: 15px;">📁</div>
+                        ` : activeTab === 'archived' ? `
+                            ${(totalArchivedCount === 0) ? `
+                                <div style="text-align: center; padding: 45px 20px; color: #64748b;">
+                                    <div style="font-size: 3.2rem; margin-bottom: 12px;">📁</div>
                                     <div style="font-weight: 900; font-size: 1.1rem; color: #0f172a;">سجل الاستلام فارغ</div>
-                                    <div style="font-size: 0.85rem; margin-top: 5px; color: #64748b;">لم يتم استلام أي تنبيهات لحفظها هنا.</div>
+                                    <div style="font-size: 0.85rem; margin-top: 5px; color: #64748b;">لم يتم وضع علامة استلام على أي تنبيه حتى الآن.</div>
                                 </div>
                             ` : `
                                 <table class="report-table" style="width:100%; border-collapse:collapse; color: #334155;">
                                     <thead>
                                         <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-                                            <th style="text-align:right; padding:12px; color: #475569; font-weight: 900;">البيان المستلم</th>
-                                            <th style="padding:12px; color: #475569; font-weight: 900; text-align:center;">القيمة</th>
-                                            <th style="padding:12px; color: #475569; font-weight: 900; text-align:center;">الحالة</th>
+                                            <th style="text-align:right; padding:10px 12px; color: #475569; font-weight: 900;">البيان المستلم</th>
+                                            <th style="padding:10px 12px; color: #475569; font-weight: 900; text-align:center;">القيمة</th>
+                                            <th style="padding:10px 12px; color: #475569; font-weight: 900; text-align:center;">الحالة</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -2650,19 +2691,71 @@ data.forEach(store => {
                                     </tbody>
                                 </table>
                             `}
+                        ` : `
+                            <!-- محتوى تبويب الإشعارات السحابية (عرض كافة الإشعارات والرسائل السحابية التاريخية) -->
+                            <div style="padding: 10px 0; display:flex; flex-direction:column; gap:16px;">
+                                ${(window.cloudAnnouncementsHistory && window.cloudAnnouncementsHistory.length > 0) ? `
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                        <span style="font-size:0.85rem; font-weight:800; color:#64748b;">سجل الرسائل والتحديثات السحابية الواردة (${window.cloudAnnouncementsHistory.length}):</span>
+                                        <button onclick="if (typeof window.checkCloudAnnouncements === 'function') { window.checkCloudAnnouncements(); setTimeout(() => showNotificationsModal('cloud'), 800); }" style="padding: 6px 14px; background: #8b5cf6; color: white; border: none; border-radius: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer;">🔄 تحديث وفحص الرسائل</button>
+                                    </div>
+                                    ${window.cloudAnnouncementsHistory.map((item, idx) => `
+                                        <div style="background: linear-gradient(135deg, #1e113a, #0f172a); border: 2px solid ${item.active ? 'rgba(212, 175, 55, 0.6)' : 'rgba(255, 255, 255, 0.15)'}; border-radius: 20px; padding: 22px 25px; color: white; box-shadow: 0 10px 25px rgba(0,0,0,0.2); position:relative;">
+                                            ${item.active ? '<span style="position:absolute; top:18px; left:20px; background:#10b981; color:#fff; font-size:0.75rem; font-weight:900; padding:3px 10px; border-radius:20px;">نشط حالياً ⚡</span>' : '<span style="position:absolute; top:18px; left:20px; background:rgba(255,255,255,0.15); color:#cbd5e1; font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:20px;">أرشيف سابق 📁</span>'}
+                                            
+                                            <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
+                                                <div style="width: 46px; height: 46px; background: linear-gradient(135deg, #d4af37, #b45309); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 12px rgba(212, 175, 55, 0.35);">
+                                                    ${item.icon || '📢'}
+                                                </div>
+                                                <div>
+                                                    <h4 style="margin: 0; font-size: 1.18rem; font-weight: 900; color: #fde047;">${item.title || 'إشعار من الإدارة'}</h4>
+                                                    <p style="margin: 3px 0 0; font-size: 0.78rem; color: #94a3b8; font-weight: bold;">تحديث سحابي مباشر ${item.id ? `• كود: ${item.id}` : ''}</p>
+                                                </div>
+                                            </div>
+
+                                            <div style="background: rgba(255,255,255,0.06); border-radius: 14px; padding: 16px 18px; font-size: 0.95rem; line-height: 1.8; font-weight: 700; color: #f8fafc; margin-bottom: 14px; border: 1px solid rgba(255,255,255,0.08); white-space: pre-line;">
+                                                ${item.message || 'لا توجد تفاصيل.'}
+                                            </div>
+
+                                            ${item.link ? `
+                                                <div style="text-align:left;">
+                                                    <button onclick="window.open('${item.link}', '_blank')" style="padding: 8px 18px; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 10px; font-weight: 900; font-size:0.85rem; cursor: pointer;">
+                                                        ${item.linkText || 'معرفة التفاصيل 🔗'}
+                                                    </button>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    `).join('')}
+                                ` : `
+                                    <div style="text-align: center; padding: 45px 20px; color: #64748b;">
+                                        <div style="font-size: 3.2rem; margin-bottom: 12px;">☁️</div>
+                                        <div style="font-weight: 900; font-size: 1.15rem; color: #0f172a;">لا توجد رسائل سحابية حالياً</div>
+                                        <div style="font-size: 0.88rem; margin-top: 6px; color: #64748b;">جميع التحديثات والتهاني المباشرة من فريق التطوير ستظهر لك وتتراكم هنا فور نشرها.</div>
+                                        <button onclick="if (typeof window.checkCloudAnnouncements === 'function') { window.checkCloudAnnouncements(); setTimeout(() => showNotificationsModal('cloud'), 1000); }" style="margin-top: 15px; padding: 8px 18px; background: #8b5cf6; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">🔄 فحص الرسائل السحابية الآن</button>
+                                    </div>
+                                `}
+                            </div>
                         `}
                     </div>
 
                     <!-- Footer -->
-                    <div style="padding: 15px 25px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="padding: 14px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            ${activeTab === 'new' && totalActiveCount > 0 ? `
-                                <button onclick="acknowledgeAllNotifications()" style="padding: 10px 22px; background: #10b981; color: white; border: none; border-radius: 10px; font-weight: 900; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2); transition: 0.2s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">
-                                    <span>✅</span> استلام واستيعاب الكل
+                            ${(activeTab === 'products' && activeLowStock.length > 0) ? `
+                                <button onclick="acknowledgeAllProductsNotifications()" style="padding: 9px 18px; background: #10b981; color: white; border: none; border-radius: 9px; font-weight: 900; cursor: pointer; font-size:0.85rem;">
+                                    <span>✔️</span> استلام جميع نواقص البضاعة
+                                </button>
+                            ` : (activeTab === 'accounts' && activeAccountsTotal > 0) ? `
+                                <button onclick="acknowledgeAllAccountsNotifications()" style="padding: 9px 18px; background: #3b82f6; color: white; border: none; border-radius: 9px; font-weight: 900; cursor: pointer; font-size:0.85rem;">
+                                    <span>✔️</span> استلام جميع تنبيهات الحسابات
+                                </button>
+                            ` : (activeTab === 'archived' && totalArchivedCount > 0) ? `
+                                <button onclick="resetAcknowledgedNotifications()" style="padding: 9px 18px; background: #ef4444; color: white; border: none; border-radius: 9px; font-weight: 900; cursor: pointer; font-size:0.85rem;">
+                                    <span>🔄</span> استعادة جميع التنبيهات للنشط
                                 </button>
                             ` : ''}
                         </div>
-                        <button onclick="document.getElementById('notifyModal').remove()" style="padding: 10px 30px; background: #0f172a; color: white; border: none; border-radius: 10px; font-weight: 900; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='#0f172a'">إغلاق</button>
+                        <button onclick="document.getElementById('notifyModal').remove()" style="padding: 9px 28px; background: #0f172a; color: white; border: none; border-radius: 9px; font-weight: 900; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='#0f172a'">إغلاق</button>
                     </div>
                 </div>
             `;
@@ -2673,7 +2766,7 @@ data.forEach(store => {
                 const fullModal = `<div id="notifyModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); backdrop-filter: blur(10px); display:flex; align-items:center; justify-content:center; z-index:99999; animation: fadeIn 0.2s ease;">${modalContent}</div>`;
                 document.body.insertAdjacentHTML('beforeend', fullModal);
             }
-        }
+        };
 
         window.openStatementFromNotify = function(accountId) {
             const notifyModal = document.getElementById('notifyModal');
@@ -3334,9 +3427,12 @@ data.forEach(store => {
                     window.print();
                 } else if (tx.type.includes('قبض') || tx.type.includes('صرف')) {
                     const isReceipt = tx.type.includes('قبض');
-                    const shopName = document.getElementById('shopName') ? document.getElementById('shopName').value : 'بـيـان POS';
+                    let savedPosSettings = {};
+                    try { savedPosSettings = JSON.parse(getStore('pos_settings') || '{}'); } catch(e) {}
+                    const shopName = savedPosSettings.name || (document.getElementById('shopName') ? document.getElementById('shopName').value : 'مؤسستي');
+                    const footerMsg = savedPosSettings.printFooterMsg || (document.getElementById('printFooterMsg') ? document.getElementById('printFooterMsg').value : 'شكراً لتعاملكم معنا!');
                     const id = tx.invoiceId || tx.id || '-';
-                    let date = tx.dateISO ? (tx.dateISO + ' ' + (tx.timeISO || '')) : (tx.date || '-');
+                    const date = tx.dateISO || (tx.date ? tx.date.split(' ')[0] : new Date().toLocaleDateString('en-CA'));
                     const partnerName = tx.partner || 'غير محدد';
                     const amount = parseFloat(tx.total || tx.paidAmount || tx.price) || 0;
 
@@ -3352,58 +3448,212 @@ data.forEach(store => {
                         }
                     }
 
+                    const formatMoney = (num) => {
+                        const isNeg = num < 0;
+                        const formatted = Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        return isNeg ? `-${formatted}` : formatted;
+                    };
+
                     const title = isReceipt ? 'سند قبض نقدية' : 'سند صرف نقدية';
-                    const actionText = isReceipt ? 'وصلنا من السيد:' : 'صرف للسيد:';
+                    const actionLabel = isReceipt ? 'وصلنا من السيد:' : 'صرف للسيد:';
+                    const amountLabel = isReceipt ? 'المبلغ المقبوض:' : 'المبلغ المنصرف:';
+                    const col1Label = isReceipt ? 'الرصيد السابق' : 'كان له';
+                    const col2Label = isReceipt ? 'المبلغ المقبوض' : 'المنصرف';
+                    const col3Label = isReceipt ? 'المتبقي عليه' : 'المتبقي له';
+                    const sign2Label = isReceipt ? 'الختم والاعتماد' : 'المدير المالي';
                     
-                    const content = `
-                        <div class="print-container" style="direction:rtl; font-family:'Arial', sans-serif; padding:10px; color:#000; width:100%; box-sizing:border-box;">
-                            <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:15px;">
-                                <div style="font-size:22px; font-weight:900;">${shopName}</div>
-                                <div style="font-size:18px; font-weight:bold; border:2px solid #000; display:inline-block; padding:2px 15px; margin-top:5px;">${title}</div>
-                            </div>
-                            <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-weight:bold; font-size:14px;">
-                                <span>رقم: ${id}</span>
-                                <span>التاريخ: ${date}</span>
-                            </div>
-                            <div style="border:1px solid #000; padding:10px; font-size:16px; margin-bottom:15px; line-height:1.6;">
-                                <div>${actionText} <b style="font-size:18px;">${partnerName}</b></div>
-                                <div style="margin-top:10px; text-align:center;">
-                                    المبلغ: <span style="font-size:26px; font-weight:900; border:2px solid #000; padding:2px 10px;">${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    const htmlContent = `
+                        <html dir="rtl" lang="ar">
+                        <head>
+                            <meta charset="utf-8">
+                            <title>${title} #${id} - ${shopName}</title>
+                            <style>
+                                @page { margin: 0; size: 80mm auto; }
+                                *, *::before, *::after { box-sizing: border-box !important; }
+                                html, body {
+                                    margin: 0 !important;
+                                    padding: 0 !important;
+                                    width: 100% !important;
+                                    max-width: 80mm !important;
+                                    background: #fff !important;
+                                    color: #000 !important;
+                                    font-family: 'Cairo', 'Segoe UI', Arial, sans-serif !important;
+                                    -webkit-print-color-adjust: exact !important;
+                                    print-color-adjust: exact !important;
+                                }
+                                .receipt-card {
+                                    width: 72mm;
+                                    margin: 0 auto;
+                                    padding: 3mm 2mm;
+                                    text-align: center;
+                                }
+                                .shop-header {
+                                    font-size: 19px;
+                                    font-weight: 900;
+                                    margin-bottom: 5px;
+                                    color: #000;
+                                }
+                                .doc-badge {
+                                    font-size: 14px;
+                                    font-weight: 900;
+                                    border: 2px solid #000;
+                                    display: inline-block;
+                                    padding: 2px 14px;
+                                    border-radius: 4px;
+                                    margin-bottom: 8px;
+                                }
+                                .meta-row {
+                                    display: flex;
+                                    justify-content: space-between;
+                                    font-size: 12px;
+                                    font-weight: 800;
+                                    border-bottom: 1.5px solid #000;
+                                    padding-bottom: 5px;
+                                    margin-bottom: 8px;
+                                }
+                                .box-info {
+                                    border: 1.5px solid #000;
+                                    border-radius: 6px;
+                                    padding: 8px;
+                                    margin-bottom: 10px;
+                                    text-align: right;
+                                    font-size: 13px;
+                                    font-weight: 700;
+                                }
+                                .amount-container {
+                                    margin-top: 6px;
+                                    text-align: center;
+                                    font-size: 13px;
+                                    font-weight: 900;
+                                }
+                                .amount-val {
+                                    font-size: 22px;
+                                    font-weight: 900;
+                                    border: 2px solid #000;
+                                    display: inline-block;
+                                    padding: 2px 12px;
+                                    border-radius: 6px;
+                                    margin-top: 3px;
+                                    font-family: 'Segoe UI', Arial, sans-serif;
+                                    direction: ltr !important;
+                                }
+                                .summary-table {
+                                    width: 100%;
+                                    border-collapse: collapse;
+                                    margin-bottom: 12px;
+                                    border: 1.5px solid #000;
+                                }
+                                .summary-table th {
+                                    border: 1px solid #000;
+                                    padding: 4px 2px;
+                                    font-size: 10px;
+                                    font-weight: 900;
+                                    background: #f1f5f9;
+                                }
+                                .summary-table td {
+                                    border: 1px solid #000;
+                                    padding: 6px 2px;
+                                    font-size: 12px;
+                                    font-weight: 900;
+                                    text-align: center;
+                                    font-family: 'Segoe UI', Arial, sans-serif;
+                                    direction: ltr !important;
+                                    white-space: nowrap;
+                                }
+                                .sign-grid {
+                                    display: grid;
+                                    grid-template-columns: 1fr 1fr;
+                                    gap: 15px;
+                                    margin-top: 20px;
+                                    font-size: 12px;
+                                    font-weight: 800;
+                                }
+                                .sign-line {
+                                    border-top: 1.5px solid #000;
+                                    padding-top: 4px;
+                                    text-align: center;
+                                }
+                                .footer-text {
+                                    margin-top: 15px;
+                                    border-top: 1px dashed #000;
+                                    padding-top: 8px;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    color: #333;
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="receipt-card">
+                                <div class="shop-header">${shopName}</div>
+                                <div class="doc-badge">${title}</div>
+                                <div class="meta-row">
+                                    <span>رقم: ${id}</span>
+                                    <span>التاريخ: ${date}</span>
+                                </div>
+
+                                <div class="box-info">
+                                    <div>${actionLabel} <b style="font-size:14px; font-weight:900;">${partnerName}</b></div>
+                                    <div class="amount-container">
+                                        <div>${amountLabel}</div>
+                                        <div class="amount-val">${formatMoney(amount)}</div>
+                                    </div>
+                                </div>
+
+                                <table class="summary-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:33%;">${col1Label}</th>
+                                            <th style="width:34%;">${col2Label}</th>
+                                            <th style="width:33%;">${col3Label}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>${formatMoney(balBefore)}</td>
+                                            <td>${formatMoney(amount)}</td>
+                                            <td>${formatMoney(balAfter)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <div class="sign-grid">
+                                    <div class="sign-line">توقيع المستلم</div>
+                                    <div class="sign-line">${sign2Label}</div>
+                                </div>
+
+                                <div class="footer-text">
+                                    <div>${footerMsg}</div>
+                                    <div style="font-size:9px; color:#666; margin-top:3px;">نظام بَيَان POS المتكامل</div>
                                 </div>
                             </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; margin-bottom: 15px; text-align: center; border: 1px solid #000;">
-                                <div style="border-left:1px solid #000; padding:5px;">
-                                    <div style="font-size: 11px;">${isReceipt ? 'الرصيد السابق' : 'كان له'}</div>
-                                    <div style="font-size: 14px; font-weight: bold;">${balBefore.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-                                </div>
-                                <div style="border-left:1px solid #000; padding:5px;">
-                                    <div style="font-size: 11px;">${isReceipt ? 'المبلغ المقبوض' : 'المنصرف'}</div>
-                                    <div style="font-size: 14px; font-weight: bold;">${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-                                </div>
-                                <div style="padding:5px;">
-                                    <div style="font-size: 11px;">${isReceipt ? 'المتبقي عليه' : 'المتبقي له'}</div>
-                                    <div style="font-size: 14px; font-weight: bold;">${balAfter.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-                                </div>
-                            </div>
-                            <div style="display:grid; grid-template-columns:1fr 1fr; margin-top:30px; font-weight:bold; text-align:center; font-size:14px; gap:20px;">
-                                <div style="border-top:1px solid #000; padding-top:5px;">توقيع المستلم</div>
-                                <div style="border-top:1px solid #000; padding-top:5px;">${isReceipt ? 'الختم' : 'المدير المالي'}</div>
-                            </div>
-                            <div style="text-align:center; margin-top:20px; border-top:1px dashed #000; padding-top:10px; font-size:12px;">
-                                <div style="font-weight:bold;">${document.getElementById('printFooterMsg') ? document.getElementById('printFooterMsg').value : 'شكراً لزيارتكم!'}</div>
-                                <div>نظام بيان POS - مبيعات متكامل</div>
-                            </div>
-                        </div>
+                            <script>
+                                window.onload = function() {
+                                    window.focus();
+                                    setTimeout(function() {
+                                        window.print();
+                                        setTimeout(function() { window.close(); }, 500);
+                                    }, 200);
+                                };
+                            <\/script>
+                        </body>
+                        </html>
                     `;
-                    
-                    let receiptArea = document.getElementById('receipt-area');
-                    if (!receiptArea) {
-                        receiptArea = document.createElement('div');
-                        receiptArea.id = 'receipt-area';
-                        document.body.appendChild(receiptArea);
+
+                    const printWindow = window.open('', '_blank');
+                    if (printWindow) {
+                        printWindow.document.write(htmlContent);
+                        printWindow.document.close();
+                    } else {
+                        let receiptArea = document.getElementById('receipt-area');
+                        if (!receiptArea) {
+                            receiptArea = document.createElement('div');
+                            receiptArea.id = 'receipt-area';
+                            document.body.appendChild(receiptArea);
+                        }
+                        receiptArea.innerHTML = htmlContent;
+                        window.print();
                     }
-                    receiptArea.innerHTML = content;
-                    window.print();
                 } else {
                     if (typeof printInvoice === 'function') {
                         let printType = tx.type || 'بيع';

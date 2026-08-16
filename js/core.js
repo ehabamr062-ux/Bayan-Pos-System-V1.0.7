@@ -54,7 +54,7 @@ if ('serviceWorker' in navigator && window.location.protocol !== 'file:' && !nav
     // =========================================================================
     document.addEventListener('DOMContentLoaded', async () => {
         try {
-            let version = '1.0.7';
+            let version = '1.0.8';
             if (typeof window !== 'undefined' && window.require) {
                 try {
                     const electron = window.require('electron');

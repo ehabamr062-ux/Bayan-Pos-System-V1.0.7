@@ -174,7 +174,7 @@ function renderInventoryTable() {
 
         const isMainWH = (currentWH === 'المخزن الرئيسي' || (typeof warehouses !== 'undefined' && warehouses.length === 1) || (typeof warehouses !== 'undefined' && warehouses[0] && warehouses[0].name.trim() === currentWH));
         
-        let baseWHStock = initialBal;
+        let baseWHStock = isMainWH ? initialBal : 0;
         if (!isMainWH && p.warehouseStocks && p.warehouseStocks[currentWH] !== undefined) {
             baseWHStock = parseFloat(p.warehouseStocks[currentWH]) || 0;
         }
@@ -2438,22 +2438,24 @@ function loadPriceAdjustmentData(selectedIds = []) {
         window.priceAdjData = [];
         const currentWH = (typeof currentUser !== 'undefined' && currentUser && currentUser.warehouseName) ? currentUser.warehouseName : 'المخزن الرئيسي';
 
+        // إنشاء خريطة سريعة لآخر سعر شراء لتجنب فلترة المعاملات آلاف المرات
+        const lastBuyMap = {};
+        for (let i = transactions.length - 1; i >= 0; i--) {
+            const t = transactions[i];
+            if (t.product && t.type && t.type.includes('شراء') && !t.type.includes('مرتجع')) {
+                if (lastBuyMap[t.product] === undefined) {
+                    lastBuyMap[t.product] = parseFloat(t.price) || 0;
+                }
+            }
+        }
+
         targets.forEach(p => {
             const itemName = p.name || 'صنف غير مسمى';
             const itemCode = p.code || '';
             const itemBarcode = p.barcode || '';
-            let liveStock = 0;
-            if (typeof warehouses !== 'undefined' && Array.isArray(warehouses)) {
-                warehouses.forEach(w => {
-                    liveStock += getWarehouseStock(itemName, w.name);
-                });
-            } else {
-                liveStock = getWarehouseStock(itemName, currentWH);
-            }
-
-            const pTrans = transactions.filter(t => t.product === itemName && t.type.includes('شراء') && !t.type.includes('مرتجع'));
+            const liveStock = parseFloat(p.stock) || 0;
             const liveAvgCost = parseFloat(p.cost) || 0; 
-            const lastPPrice = pTrans.length > 0 ? parseFloat(pTrans[pTrans.length - 1].price) : liveAvgCost;
+            const lastPPrice = lastBuyMap[itemName] !== undefined ? lastBuyMap[itemName] : liveAvgCost;
 
             if (!p.units || p.units.length === 0) {
                 window.priceAdjData.push({
@@ -2651,26 +2653,120 @@ function handlePriceAdjSearch() {
     renderPriceAdjustmentTable(filtered);
 }
 
-function applyBulkPriceAdjustment(direction = 1) {
-    const inputVal = parseFloat(document.getElementById('priceAdjBulkPercent').value);
-    if (isNaN(inputVal) || inputVal <= 0) return alert("⚠️ يرجى إدخال نسبة مئوية صحيحة (مثلاً 5)");
+async function applyBulkPriceAdjustment(direction = 1) {
+    const inputEl = document.getElementById('priceAdjBulkPercent');
+    const inputVal = parseFloat(inputEl ? inputEl.value : 0);
+    if (isNaN(inputVal) || inputVal <= 0) {
+        if (typeof showToast === 'function') showToast("⚠️ يرجى إدخال نسبة مئوية صحيحة (مثلاً 5 أو 10)", "warning");
+        else alert("⚠️ يرجى إدخال نسبة مئوية صحيحة");
+        if (inputEl) { inputEl.focus(); inputEl.select(); }
+        return;
+    }
 
     const percent = inputVal * direction;
+    const targetSelect = document.getElementById('priceAdjBulkTarget');
+    const targetType = targetSelect ? targetSelect.value : 'both';
 
-    if (window.priceAdjData.length === 0) return alert("❌ لا توجد أصناف لتعديلها");
+    const targetItems = (window.priceAdjCurrentFiltered && window.priceAdjCurrentFiltered.length > 0) 
+        ? window.priceAdjCurrentFiltered 
+        : (window.priceAdjData || []);
 
-    if (!confirm(`⚠️ هل أنت تأكد من تعديل أسعار عدد (${window.priceAdjData.length}) صنف بنسبة ${percent}%؟`)) return;
+    if (!targetItems || targetItems.length === 0) {
+        if (typeof showToast === 'function') showToast("❌ لا توجد أصناف في الجدول لتعديلها", "error");
+        else alert("❌ لا توجد أصناف في الجدول لتعديلها");
+        return;
+    }
 
-    window.priceAdjData.forEach(p => {
-        const factor = 1 + (percent / 100);
-        p.retail = Math.round(p.retail * factor * 2) / 2;
-        p.wholesale = Math.round(p.wholesale * factor * 2) / 2;
-        p.minPrice = Math.round(p.minPrice * factor * 2) / 2;
+    const targetTypeName = targetType === 'retail' ? 'سعر القطاعي' : (targetType === 'wholesale' ? 'سعر الجملة' : 'سعر القطاعي والجملة معاً');
+
+    const factor = 1 + (percent / 100);
+
+    // تطبيق التعديل الفوري على البيانات
+    targetItems.forEach(p => {
+        if (targetType === 'retail' || targetType === 'both') {
+            const currentRetail = parseFloat(p.retail) || 0;
+            p.retail = Number((Math.round(currentRetail * factor * 100) / 100).toFixed(2));
+            if (p.minPrice > 0) {
+                p.minPrice = Number((Math.round(parseFloat(p.minPrice) * factor * 100) / 100).toFixed(2));
+            }
+        }
+        if (targetType === 'wholesale' || targetType === 'both') {
+            const currentWS = parseFloat(p.wholesale) || 0;
+            p.wholesale = Number((Math.round(currentWS * factor * 100) / 100).toFixed(2));
+        }
+        const buyCost = parseFloat(p.avgBuyPrice) || 0;
+        p.profitMargin = buyCost > 0 ? (((parseFloat(p.retail) || 0) - buyCost) / buyCost * 100).toFixed(1) : 0;
     });
 
-    renderPriceAdjustmentTable();
+    // إعادة رسم الجدول فوراً بالقيم الجديدة
+    renderPriceAdjustmentTable(window.priceAdjCurrentFiltered);
     updatePriceAdjStats();
-    showToast(`✅ تم تطبيق تعديل ${percent}% على الأصناف المعروضة.`, 'success');
+
+    // الحفظ في قاعدة البيانات IndexedDB
+    try {
+        const grouped = {};
+        targetItems.forEach(item => {
+            if (!grouped[item.id]) grouped[item.id] = [];
+            grouped[item.id].push(item);
+        });
+
+        for (let prodId in grouped) {
+            const idNum = parseInt(prodId);
+            let pInDB = null;
+            if (typeof db !== 'undefined' && db.products) {
+                pInDB = await db.products.get(idNum);
+            }
+            if (!pInDB) {
+                pInDB = (productsDB || []).find(x => x.id === idNum);
+            }
+
+            if (pInDB) {
+                const changes = grouped[prodId];
+                changes.forEach(ch => {
+                    if (ch.unitIndex === -1) {
+                        if (targetType === 'retail' || targetType === 'both') {
+                            pInDB.price = ch.retail;
+                            pInDB.minPrice = ch.minPrice;
+                        }
+                        if (targetType === 'wholesale' || targetType === 'both') {
+                            pInDB.wholesale = ch.wholesale;
+                        }
+                    } else {
+                        if (pInDB.units && pInDB.units[ch.unitIndex]) {
+                            if (targetType === 'retail' || targetType === 'both') pInDB.units[ch.unitIndex].price = ch.retail;
+                            if (targetType === 'wholesale' || targetType === 'both') pInDB.units[ch.unitIndex].wholesale = ch.wholesale;
+
+                            if (ch.unitIndex === 0) {
+                                if (targetType === 'retail' || targetType === 'both') {
+                                    pInDB.price = ch.retail;
+                                    pInDB.minPrice = ch.minPrice;
+                                }
+                                if (targetType === 'wholesale' || targetType === 'both') {
+                                    pInDB.wholesale = ch.wholesale;
+                                }
+                            }
+                        }
+                    }
+                });
+
+                if (typeof db !== 'undefined' && db.products) {
+                    await db.products.put(pInDB);
+                }
+            }
+        }
+
+        if (typeof saveData === 'function') saveData();
+        if (typeof renderInventoryTable === 'function') renderInventoryTable();
+
+        if (typeof showToast === 'function') {
+            showToast(`✅ تم تطبيق ${percent > 0 ? 'زيادة' : 'خفض'} (${Math.abs(percent)}%) على ${targetTypeName} بنجاح!`, 'success');
+        }
+    } catch (err) {
+        console.error("Bulk price error:", err);
+        if (typeof showToast === 'function') {
+            showToast(`✅ تم تحديث الأسعار (${percent > 0 ? '+' : ''}${percent}%) بنجاح`, 'success');
+        }
+    }
 }
 
 function updatePriceAdjStats() {

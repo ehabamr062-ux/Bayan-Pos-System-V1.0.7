@@ -75,6 +75,12 @@ function handleTreasuryQuickJump(val) {
 
     updateTreasuryAuditStats();
     renderTreasuryAuditTable();
+
+    // ⚡ تحديث المبلغ تلقائياً فوراً إذا كان البند المختار "مبيعات"
+    const catSelect = document.getElementById('trCategory');
+    if (catSelect && catSelect.value === 'مبيعات') {
+        handleTreasuryCategoryChange('مبيعات');
+    }
 }
 
 // 2.01 دالة التعامل المباشر عند تغيير مدخل التاريخ بيدك
@@ -86,6 +92,12 @@ function handleTreasuryDateInputChange() {
     }
     updateTreasuryAuditStats();
     renderTreasuryAuditTable();
+
+    // ⚡ تحديث المبلغ تلقائياً فوراً إذا كان البند المختار "مبيعات"
+    const catSelect = document.getElementById('trCategory');
+    if (catSelect && catSelect.value === 'مبيعات') {
+        handleTreasuryCategoryChange('مبيعات');
+    }
 }
 
 // 2.1 دالة مساعدة للحصول على نطاق تاريخ بداية ونهاية حسب الخيار المحدد
@@ -153,25 +165,80 @@ function handleTreasuryCategoryChange(val) {
 
     // 🎯 عند اختيار بند "مبيعات" فقط: يجلب المبيعات والمقبوضات ويجمعهم تلقائياً في المبلغ (تحت)
     if (val === 'مبيعات') {
-        const currentDate = document.getElementById('trDate') ? document.getElementById('trDate').value : new Date().toISOString().split('T')[0];
+        const dateInput = document.getElementById('trDate');
+        let currentDate = (dateInput && dateInput.value) ? dateInput.value.trim() : '';
+        if (!currentDate) {
+            currentDate = new Date().toLocaleDateString('en-CA');
+            if (dateInput) dateInput.value = currentDate;
+        }
+
         let totalSalesAndReceipts = 0;
 
-        // 1. حساب إجمالي فواتير البيع والمقبوضات من قاعدة البيانات الرئيسية إذا وجدت
+        // 1. حساب إجمالي فواتير البيع والمقبوضات النقدية بدقة من قاعدة البيانات
         try {
             const allTx = (window.transactions || []);
-            const dayTx = allTx.filter(t => (t.dateISO === currentDate || t.date === currentDate));
-            dayTx.forEach(t => {
-                const total = parseFloat(t.total) || parseFloat(t.price) || parseFloat(t.paidAmount) || 0;
-                const type = String(t.type || '');
-                if (type.includes('بيع') || type.includes('قبض')) {
-                    totalSalesAndReceipts += total;
+            const cleanDate = currentDate.slice(0, 10);
+
+            // تجميع الفواتير لتجنب تكرار بنود الفاتورة الواحدة
+            const ivMap = {};
+            const directReceipts = [];
+
+            allTx.forEach((t, i) => {
+                let tDate = (t.dateISO || t.date || '').trim();
+                if (tDate.includes('T')) tDate = tDate.split('T')[0];
+                else if (tDate.match(/^\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{4}/)) {
+                    const parts = tDate.split(/[\/\.-]/);
+                    tDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                } else if (tDate.length > 10) {
+                    tDate = tDate.slice(0, 10);
                 }
+
+                if (tDate !== cleanDate) return;
+
+                const typeStr = String(t.type || '');
+
+                // أ. فواتير البيع
+                if (typeStr.includes('بيع') && !typeStr.includes('مرتجع')) {
+                    const invId = t.invoiceId || ('sale_single_' + i);
+                    if (!ivMap[invId]) {
+                        ivMap[invId] = {
+                            total: 0,
+                            paid: 0,
+                            method: (t.method || t.paymentMethod || '').toLowerCase()
+                        };
+                    }
+                    ivMap[invId].total += (parseFloat(t.total) || parseFloat(t.price) || 0);
+                    if (t.isInvoiceHead || t.paidAmount !== undefined) {
+                        ivMap[invId].paid = Math.max(ivMap[invId].paid, (parseFloat(t.paidAmount) || 0));
+                    }
+                }
+
+                // ب. سندات القبض النقدية
+                if (typeStr.includes('قبض')) {
+                    const rAmount = parseFloat(t.total) || parseFloat(t.price) || parseFloat(t.paidAmount) || 0;
+                    directReceipts.push(rAmount);
+                }
+            });
+
+            // حساب المبالغ المحصلة من فواتير البيع (المدفوع نقداً / الكاش)
+            Object.values(ivMap).forEach(iv => {
+                const isExplicitCredit = iv.method.includes('آجل') || iv.method.includes('اجل') || iv.method.includes('credit') || iv.method.includes('تقسيط') || iv.method.includes('ذمم');
+                if (isExplicitCredit) {
+                    totalSalesAndReceipts += (iv.paid || 0);
+                } else {
+                    totalSalesAndReceipts += (iv.paid > 0 ? iv.paid : iv.total);
+                }
+            });
+
+            // إضافة سندات القبض
+            directReceipts.forEach(amt => {
+                totalSalesAndReceipts += amt;
             });
         } catch (e) {
             console.warn("جاري جلب إجمالي المبيعات والمقبوضات...", e);
         }
 
-        // 2. إذا لم يكن هناك فواتير مسجلة في الفواتير العامة، نأخذ المجموع المسجل حالياً في الخزينة
+        // 2. إذا لم يتم العثور على فواتير، نفحص إن كان هناك مبيعات مسجلة في سجلات الخزينة لهذا اليوم
         if (totalSalesAndReceipts === 0) {
             const records = window.treasuryAuditRecords || [];
             const dayRecords = records.filter(r => r.date === currentDate);
@@ -183,8 +250,8 @@ function handleTreasuryCategoryChange(val) {
         }
 
         const bottomInput = document.getElementById('trAmountBottom');
-        if (bottomInput && totalSalesAndReceipts > 0) {
-            bottomInput.value = totalSalesAndReceipts.toFixed(2);
+        if (bottomInput) {
+            bottomInput.value = totalSalesAndReceipts > 0 ? totalSalesAndReceipts.toFixed(2) : '0.00';
             bottomInput.focus();
             bottomInput.select();
         }

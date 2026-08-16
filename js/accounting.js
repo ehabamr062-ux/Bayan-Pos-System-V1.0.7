@@ -103,6 +103,12 @@
                     };
                 }
 
+                if (t.partner && (!groups[key].partner || groups[key].partner === 'عميل نقدي' || groups[key].partner === 'مورد نقدي')) {
+                    groups[key].partner = t.partner;
+                }
+                if (t.method) {
+                    groups[key].method = t.method;
+                }
                 if (t.is_returned) groups[key].is_returned = true;
                 if (t.product) {
                     groups[key].itemsCount++;
@@ -120,8 +126,8 @@
                 }
                 groups[key].profit += itemProfit;
 
-                if (t.isInvoiceHead) {
-                    groups[key].paid = parseFloat(t.paidAmount) || 0;
+                if (t.isInvoiceHead || t.paidAmount !== undefined) {
+                    groups[key].paid = Math.max(groups[key].paid, (parseFloat(t.paidAmount) || 0));
                 } else if (!t.invoiceId) {
                     groups[key].paid = (parseFloat(t.total) || parseFloat(t.price) || 0);
                 }
@@ -169,20 +175,27 @@
 
             let rawData = transactions.map((t, i) => ({ ...t, originalIndex: i }));
 
-            // فلترة التاريخ
+            const cleanAr = (str) => (str || '').toString().trim().toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/[ىي]/g, 'ي').replace(/\s+/g, ' ');
 
-            if (fromDate) rawData = rawData.filter(t => t.dateISO >= fromDate && t.dateISO !== undefined);
+            // فلترة التاريخ بمرونة
+            if (fromDate) {
+                rawData = rawData.filter(t => {
+                    const iso = t.dateISO || (t.date ? t.date.split(' ')[0] : '');
+                    return iso ? (iso >= fromDate) : true;
+                });
+            }
 
-            if (toDate) rawData = rawData.filter(t => t.dateISO <= toDate && t.dateISO !== undefined);
+            if (toDate) {
+                rawData = rawData.filter(t => {
+                    const iso = t.dateISO || (t.date ? t.date.split(' ')[0] : '');
+                    return iso ? (iso <= toDate) : true;
+                });
+            }
 
             // تصفية أصلية (Modified for Tabs)
-
             if (typeFilter === 'all') {
-
                 // لا نستثني أياً من العمليات ليظهر الكل بما في ذلك تسوية المخزون والتحويلات
-
             } else {
-
                 rawData = rawData.filter(t => {
                     const tType = t.type || '';
                     if (typeFilter === 'بيع') {
@@ -199,45 +212,29 @@
                     }
                     return tType.includes(typeFilter);
                 });
-
             }
 
             if (searchId) {
-
                 rawData = rawData.filter(t => t.invoiceId && t.invoiceId.toString().includes(searchId));
-
             }
 
             if (searchPartner) {
-
-                // العثور على أسماء الحسابات التي تطابق المدخل (اسم، كود، أو هاتف)
-
+                const cleanSearch = cleanAr(searchPartner);
                 const matchingAccountNames = accounts.filter(acc => {
-
-                    const nameMatch = acc.name && acc.name.toLowerCase().includes(searchPartner);
-
+                    const nameMatch = acc.name && cleanAr(acc.name).includes(cleanSearch);
                     const codeMatch = acc.code && acc.code.toString().toLowerCase().includes(searchPartner);
-
                     const phoneMatch = (acc.mobile && acc.mobile.toString().includes(searchPartner)) || (acc.landline && acc.landline.toString().includes(searchPartner));
-
                     return nameMatch || codeMatch || phoneMatch;
+                }).map(acc => cleanAr(acc.name));
 
-                }).map(acc => acc.name.toLowerCase());
-
-                rawData = rawData.filter(t => t.partner && (
-
-                    t.partner.toLowerCase().includes(searchPartner) ||
-
-                    matchingAccountNames.includes(t.partner.toLowerCase())
-
-                ));
-
+                rawData = rawData.filter(t => {
+                    const pName = cleanAr(t.partner);
+                    return pName.includes(cleanSearch) || matchingAccountNames.some(m => pName.includes(m) || m.includes(pName));
+                });
             }
 
             if (searchProduct) {
-
                 rawData = rawData.filter(t => t.product && t.product.toLowerCase().includes(searchProduct));
-
             }
 
             let finalData = [];
@@ -1009,19 +1006,27 @@ if (finalData.length === 0) tbody.innerHTML = '<tr><td colspan="13" style="text-
                             document.getElementById('salesTime').value = t.timeISO || '';
 
                             // 1. استرجاع طريقة السداد الحقيقية للفاتورة (آجل / كاش / بنك)
+                            if (typeof populatePaymentMethodSelects === 'function') populatePaymentMethodSelects();
                             const methodSelect = document.getElementById('sales-sectionPaymentMethodSelect') || document.getElementById('salesPaymentMethodSelect');
-                            const actualMethod = t.method || (t.paymentMethod || 'نقدي');
+                            const actualMethod = String(t.method || t.paymentMethod || 'نقدي').trim();
                             if (methodSelect) {
-                                // مطابقة القيمة مع الخيارات المتاحة
-                                const options = Array.from(methodSelect.options).map(o => o.value);
-                                if (options.includes(actualMethod)) {
-                                    methodSelect.value = actualMethod;
-                                } else if (actualMethod.includes('آجل') || actualMethod.includes('اجل')) {
-                                    methodSelect.value = 'آجل';
-                                } else if (actualMethod.includes('تحويل') || actualMethod.includes('بنك') || actualMethod.includes('شيك')) {
-                                    methodSelect.value = 'تحويل';
-                                } else {
-                                    methodSelect.value = 'نقدي';
+                                if (methodSelect.options.length === 0 && typeof populatePaymentMethodSelects === 'function') {
+                                    populatePaymentMethodSelects();
+                                }
+                                let matchedOpt = Array.from(methodSelect.options).find(o => o.value === actualMethod || o.text.includes(actualMethod));
+                                if (!matchedOpt) {
+                                    if (actualMethod.includes('آجل') || actualMethod.includes('اجل')) {
+                                        matchedOpt = Array.from(methodSelect.options).find(o => o.value.includes('آجل') || o.value.includes('اجل'));
+                                    } else if (actualMethod.includes('تحويل') || actualMethod.includes('بنك') || actualMethod.includes('شيك') || actualMethod.includes('فيزا') || actualMethod.includes('شبكة')) {
+                                        matchedOpt = Array.from(methodSelect.options).find(o => o.value.includes('تحويل') || o.value.includes('بنك') || o.value.includes('شيك'));
+                                    } else {
+                                        matchedOpt = Array.from(methodSelect.options).find(o => o.value.includes('نقدي') || o.value.includes('كاش'));
+                                    }
+                                }
+                                if (matchedOpt) {
+                                    methodSelect.value = matchedOpt.value;
+                                } else if (methodSelect.options.length > 0) {
+                                    methodSelect.selectedIndex = 0;
                                 }
                                 if (typeof selectMethod === 'function') selectMethod(methodSelect);
                             }
@@ -1100,18 +1105,27 @@ if (finalData.length === 0) tbody.innerHTML = '<tr><td colspan="13" style="text-
                             document.getElementById('purchaseTime').value = t.timeISO || '';
 
                             // 1. استرجاع طريقة السداد لشاشة الشراء (آجل / كاش / بنك)
+                            if (typeof populatePaymentMethodSelects === 'function') populatePaymentMethodSelects();
                             const purMethodSelect = document.getElementById('purchase-sectionPaymentMethodSelect') || document.getElementById('purchasePaymentMethodSelect');
-                            const actualPurMethod = t.method || (t.paymentMethod || 'نقدي');
+                            const actualPurMethod = String(t.method || t.paymentMethod || 'نقدي').trim();
                             if (purMethodSelect) {
-                                const purOptions = Array.from(purMethodSelect.options).map(o => o.value);
-                                if (purOptions.includes(actualPurMethod)) {
-                                    purMethodSelect.value = actualPurMethod;
-                                } else if (actualPurMethod.includes('آجل') || actualPurMethod.includes('اجل')) {
-                                    purMethodSelect.value = 'آجل';
-                                } else if (actualPurMethod.includes('شيك')) {
-                                    purMethodSelect.value = 'شيك';
-                                } else {
-                                    purMethodSelect.value = 'نقدي';
+                                if (purMethodSelect.options.length === 0 && typeof populatePaymentMethodSelects === 'function') {
+                                    populatePaymentMethodSelects();
+                                }
+                                let matchedOpt = Array.from(purMethodSelect.options).find(o => o.value === actualPurMethod || o.text.includes(actualPurMethod));
+                                if (!matchedOpt) {
+                                    if (actualPurMethod.includes('آجل') || actualPurMethod.includes('اجل')) {
+                                        matchedOpt = Array.from(purMethodSelect.options).find(o => o.value.includes('آجل') || o.value.includes('اجل'));
+                                    } else if (actualPurMethod.includes('شيك') || actualPurMethod.includes('تحويل') || actualPurMethod.includes('بنك')) {
+                                        matchedOpt = Array.from(purMethodSelect.options).find(o => o.value.includes('شيك') || o.value.includes('تحويل') || o.value.includes('بنك'));
+                                    } else {
+                                        matchedOpt = Array.from(purMethodSelect.options).find(o => o.value.includes('نقدي') || o.value.includes('كاش'));
+                                    }
+                                }
+                                if (matchedOpt) {
+                                    purMethodSelect.value = matchedOpt.value;
+                                } else if (purMethodSelect.options.length > 0) {
+                                    purMethodSelect.selectedIndex = 0;
                                 }
                                 if (typeof selectMethod === 'function') selectMethod(purMethodSelect);
                             }
@@ -1189,7 +1203,13 @@ if (finalData.length === 0) tbody.innerHTML = '<tr><td colspan="13" style="text-
 
                             const returnMethodSelect = document.getElementById('sales-return-sectionPaymentMethodSelect') || document.getElementById('salesReturnPaymentMethodSelect');
                             if (returnMethodSelect) {
-                                returnMethodSelect.value = t.method || 'نقدي (من الخزنة)';
+                                if (returnMethodSelect.options.length === 0 && typeof populatePaymentMethodSelects === 'function') {
+                                    populatePaymentMethodSelects();
+                                }
+                                const actualReturnMethod = String(t.method || 'نقدي').trim();
+                                let matchedOpt = Array.from(returnMethodSelect.options).find(o => o.value === actualReturnMethod || o.text.includes(actualReturnMethod));
+                                if (matchedOpt) returnMethodSelect.value = matchedOpt.value;
+                                else if (returnMethodSelect.options.length > 0) returnMethodSelect.selectedIndex = 0;
                                 if (typeof selectMethod === 'function') selectMethod(returnMethodSelect);
                             }
 
@@ -1222,7 +1242,13 @@ if (finalData.length === 0) tbody.innerHTML = '<tr><td colspan="13" style="text-
 
                             const purReturnMethodSelect = document.getElementById('purchase-return-sectionPaymentMethodSelect') || document.getElementById('purReturnPaymentMethodSelect');
                             if (purReturnMethodSelect) {
-                                purReturnMethodSelect.value = t.method || 'نقدي (من الخزنة)';
+                                if (purReturnMethodSelect.options.length === 0 && typeof populatePaymentMethodSelects === 'function') {
+                                    populatePaymentMethodSelects();
+                                }
+                                const actualPurReturnMethod = String(t.method || 'نقدي').trim();
+                                let matchedOpt = Array.from(purReturnMethodSelect.options).find(o => o.value === actualPurReturnMethod || o.text.includes(actualPurReturnMethod));
+                                if (matchedOpt) purReturnMethodSelect.value = matchedOpt.value;
+                                else if (purReturnMethodSelect.options.length > 0) purReturnMethodSelect.selectedIndex = 0;
                                 if (typeof selectMethod === 'function') selectMethod(purReturnMethodSelect);
                             }
 
@@ -2504,261 +2530,449 @@ if (finalData.length === 0) tbody.innerHTML = '<tr><td colspan="13" style="text-
         // --- 1. منطق البحث والإضافة ---
 
         function printReceiptData() {
-
-            const payer = document.getElementById('receiptCustomer').value || 'غير محدد';
-
-            const amount = parseFloat(document.getElementById('receiptAmount').value) || 0;
-
-            if (amount <= 0) return alert("⚠️ يرجى إدخال مبلغ صحيح للطباعة!");
-
-            const id = document.getElementById('receiptID').value;
-
-            const date = document.getElementById('receiptDate').value;
-
-            const time = document.getElementById('receiptTime').value || '';
-
-            const shopName = document.getElementById('shopName').value || 'بـيـان POS';
-
-            // حساب المديونية بشكل ذكي (التأكد إذا كانت الحركة مسجلة بالفعل أم لا)
-
-            const isAlreadySaved = transactions.some(t => t.invoiceId === id && t.type === 'قبض 📥');
-
-            const currentBalance = getAccountBalance(payer);
-
-            let balBefore, balAfter;
-
-            if (isAlreadySaved) {
-
-                // لو مسجلة: يبقى الرصيد الحالي هو "الرصيد بعد"
-
-                balAfter = currentBalance;
-
-                balBefore = currentBalance + amount; // بنرجع المبلغ عشان نعرف "قبل"
-
-            } else {
-
-                // لو مش مسجلة: يبقى الرصيد الحالي هو "الرصيد قبل"
-
-                balBefore = currentBalance;
-
-                balAfter = currentBalance - amount;
-
+            const payer = (document.getElementById('receiptCustomer')?.value || 'غير محدد').trim();
+            const amount = parseFloat(document.getElementById('receiptAmount')?.value) || 0;
+            if (amount <= 0) {
+                if (typeof showToast === 'function') showToast("⚠️ يرجى إدخال مبلغ صحيح للطباعة!", "warning");
+                else alert("⚠️ يرجى إدخال مبلغ صحيح للطباعة!");
+                return;
             }
 
-            const content = `
+            const id = document.getElementById('receiptID')?.value || '';
+            const date = document.getElementById('receiptDate')?.value || new Date().toLocaleDateString('en-CA');
+            const time = document.getElementById('receiptTime')?.value || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
 
-                <div class="print-container" style="direction:rtl; font-family:'Arial', sans-serif; padding:10px; color:#000; width:100%; box-sizing:border-box;">
+            let savedPosSettings = {};
+            try { savedPosSettings = JSON.parse(getStore('pos_settings') || '{}'); } catch(e) {}
+            const shopName = savedPosSettings.name || document.getElementById('shopName')?.value || 'مؤسستي';
+            const footerMsg = savedPosSettings.printFooterMsg || document.getElementById('printFooterMsg')?.value || 'شكراً لتعاملكم معنا!';
 
-                    <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:15px;">
+            const isAlreadySaved = transactions.some(t => String(t.invoiceId) === String(id) && (t.type || '').includes('قبض'));
+            const currentBalance = typeof getAccountBalance === 'function' ? getAccountBalance(payer) : 0;
+            let balBefore, balAfter;
+            if (isAlreadySaved) {
+                balAfter = currentBalance;
+                balBefore = currentBalance + amount;
+            } else {
+                balBefore = currentBalance;
+                balAfter = currentBalance - amount;
+            }
 
-                        <div style="font-size:22px; font-weight:900;">${shopName}</div>
+            const formatMoney = (num) => {
+                const isNeg = num < 0;
+                const formatted = Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                return isNeg ? `-${formatted}` : formatted;
+            };
 
-                        <div style="font-size:18px; font-weight:bold; border:2px solid #000; display:inline-block; padding:2px 15px; margin-top:5px;">سند قبض نقدية</div>
-
-                    </div>
-
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-weight:bold; font-size:14px;">
-
-                        <span>رقم: ${id}</span>
-
-                        <span>التاريخ: ${date}</span>
-
-                    </div>
-
-                    <div style="border:1px solid #000; padding:10px; font-size:16px; margin-bottom:15px; line-height:1.6;">
-
-                        <div>وصلنا من السيد: <b style="font-size:18px;">${payer}</b></div>
-
-                        <div style="margin-top:10px; text-align:center;">
-
-                            المبلغ: <span style="font-size:26px; font-weight:900; border:2px solid #000; padding:2px 10px;">${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-
+            const htmlContent = `
+                <html dir="rtl" lang="ar">
+                <head>
+                    <meta charset="utf-8">
+                    <title>سند قبض #${id} - ${shopName}</title>
+                    <style>
+                        @page { margin: 0; size: 80mm auto; }
+                        *, *::before, *::after { box-sizing: border-box !important; }
+                        html, body {
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            width: 100% !important;
+                            max-width: 80mm !important;
+                            background: #fff !important;
+                            color: #000 !important;
+                            font-family: 'Cairo', 'Segoe UI', Arial, sans-serif !important;
+                            -webkit-print-color-adjust: exact !important;
+                            print-color-adjust: exact !important;
+                        }
+                        .receipt-card {
+                            width: 72mm;
+                            margin: 0 auto;
+                            padding: 3mm 2mm;
+                            text-align: center;
+                        }
+                        .shop-header {
+                            font-size: 19px;
+                            font-weight: 900;
+                            margin-bottom: 5px;
+                            color: #000;
+                        }
+                        .doc-badge {
+                            font-size: 14px;
+                            font-weight: 900;
+                            border: 2px solid #000;
+                            display: inline-block;
+                            padding: 2px 14px;
+                            border-radius: 4px;
+                            margin-bottom: 8px;
+                        }
+                        .meta-row {
+                            display: flex;
+                            justify-content: space-between;
+                            font-size: 12px;
+                            font-weight: 800;
+                            border-bottom: 1.5px solid #000;
+                            padding-bottom: 5px;
+                            margin-bottom: 8px;
+                        }
+                        .box-info {
+                            border: 1.5px solid #000;
+                            border-radius: 6px;
+                            padding: 8px;
+                            margin-bottom: 10px;
+                            text-align: right;
+                            font-size: 13px;
+                            font-weight: 700;
+                        }
+                        .amount-container {
+                            margin-top: 6px;
+                            text-align: center;
+                            font-size: 13px;
+                            font-weight: 900;
+                        }
+                        .amount-val {
+                            font-size: 22px;
+                            font-weight: 900;
+                            border: 2px solid #000;
+                            display: inline-block;
+                            padding: 2px 12px;
+                            border-radius: 6px;
+                            margin-top: 3px;
+                            font-family: 'Segoe UI', Arial, sans-serif;
+                            direction: ltr !important;
+                        }
+                        .summary-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-bottom: 12px;
+                            border: 1.5px solid #000;
+                        }
+                        .summary-table th {
+                            border: 1px solid #000;
+                            padding: 4px 2px;
+                            font-size: 10px;
+                            font-weight: 900;
+                            background: #f1f5f9;
+                        }
+                        .summary-table td {
+                            border: 1px solid #000;
+                            padding: 6px 2px;
+                            font-size: 12px;
+                            font-weight: 900;
+                            text-align: center;
+                            font-family: 'Segoe UI', Arial, sans-serif;
+                            direction: ltr !important;
+                            white-space: nowrap;
+                        }
+                        .sign-grid {
+                            display: grid;
+                            grid-template-columns: 1fr 1fr;
+                            gap: 15px;
+                            margin-top: 20px;
+                            font-size: 12px;
+                            font-weight: 800;
+                        }
+                        .sign-line {
+                            border-top: 1.5px solid #000;
+                            padding-top: 4px;
+                            text-align: center;
+                        }
+                        .footer-text {
+                            margin-top: 15px;
+                            border-top: 1px dashed #000;
+                            padding-top: 8px;
+                            font-size: 11px;
+                            font-weight: 700;
+                            color: #333;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="receipt-card">
+                        <div class="shop-header">${shopName}</div>
+                        <div class="doc-badge">سند قبض نقدية</div>
+                        <div class="meta-row">
+                            <span>رقم: ${id}</span>
+                            <span>التاريخ: ${date}</span>
                         </div>
 
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; margin-bottom: 15px; text-align: center; border: 1px solid #000;">
-
-                        <div style="border-left:1px solid #000; padding:5px;">
-
-                            <div style="font-size: 11px;">الرصيد السابق</div>
-
-                            <div style="font-size: 14px; font-weight: bold;">${balBefore.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-
+                        <div class="box-info">
+                            <div>وصلنا من السيد: <b style="font-size:14px; font-weight:900;">${payer}</b></div>
+                            <div class="amount-container">
+                                <div>المبلغ المقبوض:</div>
+                                <div class="amount-val">${formatMoney(amount)}</div>
+                            </div>
                         </div>
 
-                        <div style="border-left:1px solid #000; padding:5px;">
+                        <table class="summary-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:33%;">الرصيد السابق</th>
+                                    <th style="width:34%;">المبلغ المقبوض</th>
+                                    <th style="width:33%;">المتبقي عليه</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>${formatMoney(balBefore)}</td>
+                                    <td>${formatMoney(amount)}</td>
+                                    <td>${formatMoney(balAfter)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
 
-                            <div style="font-size: 11px;">المبلغ المقبوض</div>
-
-                            <div style="font-size: 14px; font-weight: bold;">${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-
+                        <div class="sign-grid">
+                            <div class="sign-line">توقيع المستلم</div>
+                            <div class="sign-line">الختم والاعتماد</div>
                         </div>
 
-                        <div style="padding:5px;">
-
-                            <div style="font-size: 11px;">المتبقي عليه</div>
-
-                            <div style="font-size: 14px; font-weight: bold;">${balAfter.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-
+                        <div class="footer-text">
+                            <div>${footerMsg}</div>
+                            <div style="font-size:9px; color:#666; margin-top:3px;">نظام بَيَان POS المتكامل</div>
                         </div>
-
                     </div>
-
-                    <div style="display:grid; grid-template-columns:1fr 1fr; margin-top:30px; font-weight:bold; text-align:center; font-size:14px; gap:20px;">
-
-                        <div style="border-top:1px solid #000; padding-top:5px;">توقيع المستلم</div>
-
-                        <div style="border-top:1px solid #000; padding-top:5px;">الختم</div>
-
-                    </div>
-
-                    <div style="text-align:center; margin-top:20px; border-top:1px dashed #000; padding-top:10px; font-size:12px;">
-
-                        <div style="font-weight:bold;">${document.getElementById('printFooterMsg').value || 'شكراً لزيارتكم!'}</div>
-
-                        <div>نظام بيان POS - مبيعات متكامل</div>
-
-                    </div>
-
-                </div>
-
+                    <script>
+                        window.onload = function() {
+                            window.focus();
+                            setTimeout(function() {
+                                window.print();
+                                setTimeout(function() { window.close(); }, 500);
+                            }, 200);
+                        };
+                    <\/script>
+                </body>
+                </html>
             `;
 
-            document.getElementById('receipt-area').innerHTML = content;
-
-            window.print();
-
+            const printWindow = window.open('', '_blank');
+            if (printWindow) {
+                printWindow.document.write(htmlContent);
+                printWindow.document.close();
+            } else {
+                document.getElementById('receipt-area').innerHTML = htmlContent;
+                window.print();
+            }
         }
 
         function printDisbursementData() {
-
-            const amount = document.getElementById('disburseAmount').value;
-
-            if (!amount || parseFloat(amount) <= 0) return alert("⚠️ يرجى إدخال مبلغ صحيح للطباعة!");
-
-            const id = document.getElementById('disburseID').value;
-
-            const date = document.getElementById('disburseDate').value;
-
-            const time = document.getElementById('disburseTime').value || '';
-
-            const payee = document.getElementById('disbursePayee').value || 'غير محدد';
-
-            const notes = document.getElementById('disburseNotes').value;
-
-            const shopName = document.getElementById('shopName').value || 'بـيـان POS';
-
-            // حساب المديونية بشكل ذكي (التأكد إذا كانت الحركة مسجلة بالفعل أم لا)
-
-            const isAlreadySaved = transactions.some(t => t.invoiceId === id && t.type === 'صرف 📤');
-
-            const currentBalance = getAccountBalance(payee);
-
-            let balBefore, balAfter;
-
-            if (isAlreadySaved) {
-
-                // لو مسجلة: يبقى الرصيد الحالي هو "الرصيد بعد"
-
-                balAfter = currentBalance;
-
-                balBefore = currentBalance - parseFloat(amount); // بنرجع المبلغ (عكس الصرف) عشان نعرف "قبل"
-
-            } else {
-
-                // لو مش مسجلة: يبقى الرصيد الحالي هو "الرصيد قبل"
-
-                balBefore = currentBalance;
-
-                balAfter = currentBalance + parseFloat(amount);
-
+            const payee = (document.getElementById('disbursePayee')?.value || 'غير محدد').trim();
+            const amount = parseFloat(document.getElementById('disburseAmount')?.value) || 0;
+            if (amount <= 0) {
+                if (typeof showToast === 'function') showToast("⚠️ يرجى إدخال مبلغ صحيح للطباعة!", "warning");
+                else alert("⚠️ يرجى إدخال مبلغ صحيح للطباعة!");
+                return;
             }
 
-            const content = `
+            const id = document.getElementById('disburseID')?.value || '';
+            const date = document.getElementById('disburseDate')?.value || new Date().toLocaleDateString('en-CA');
+            const time = document.getElementById('disburseTime')?.value || new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
 
-                <div class="print-container" style="direction:rtl; font-family:'Arial', sans-serif; padding:10px; color:#000; width:100%; box-sizing:border-box;">
+            let savedPosSettings = {};
+            try { savedPosSettings = JSON.parse(getStore('pos_settings') || '{}'); } catch(e) {}
+            const shopName = savedPosSettings.name || document.getElementById('shopName')?.value || 'مؤسستي';
+            const footerMsg = savedPosSettings.printFooterMsg || document.getElementById('printFooterMsg')?.value || 'شكراً لتعاملكم معنا!';
 
-                    <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:15px;">
+            const isAlreadySaved = transactions.some(t => String(t.invoiceId) === String(id) && (t.type || '').includes('صرف'));
+            const currentBalance = typeof getAccountBalance === 'function' ? getAccountBalance(payee) : 0;
+            let balBefore, balAfter;
+            if (isAlreadySaved) {
+                balAfter = currentBalance;
+                balBefore = currentBalance - amount;
+            } else {
+                balBefore = currentBalance;
+                balAfter = currentBalance + amount;
+            }
 
-                        <div style="font-size:22px; font-weight:900;">${shopName}</div>
+            const formatMoney = (num) => {
+                const isNeg = num < 0;
+                const formatted = Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                return isNeg ? `-${formatted}` : formatted;
+            };
 
-                        <div style="font-size:18px; font-weight:bold; border:2px solid #000; display:inline-block; padding:2px 15px; margin-top:5px;">سند صرف نقدية</div>
-
-                    </div>
-
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-weight:bold; font-size:14px;">
-
-                        <span>رقم: ${id}</span>
-
-                        <span>التاريخ: ${date}</span>
-
-                    </div>
-
-                    <div style="border:1px solid #000; padding:10px; font-size:16px; margin-bottom:15px; line-height:1.6;">
-
-                        <div>صرف للسيد: <b style="font-size:18px;">${payee}</b></div>
-
-                        <div style="margin-top:10px; text-align:center;">
-
-                            المبلغ: <span style="font-size:26px; font-weight:900; border:2px solid #000; padding:2px 10px;">${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-
+            const htmlContent = `
+                <html dir="rtl" lang="ar">
+                <head>
+                    <meta charset="utf-8">
+                    <title>سند صرف #${id} - ${shopName}</title>
+                    <style>
+                        @page { margin: 0; size: 80mm auto; }
+                        *, *::before, *::after { box-sizing: border-box !important; }
+                        html, body {
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            width: 100% !important;
+                            max-width: 80mm !important;
+                            background: #fff !important;
+                            color: #000 !important;
+                            font-family: 'Cairo', 'Segoe UI', Arial, sans-serif !important;
+                            -webkit-print-color-adjust: exact !important;
+                            print-color-adjust: exact !important;
+                        }
+                        .receipt-card {
+                            width: 72mm;
+                            margin: 0 auto;
+                            padding: 3mm 2mm;
+                            text-align: center;
+                        }
+                        .shop-header {
+                            font-size: 19px;
+                            font-weight: 900;
+                            margin-bottom: 5px;
+                            color: #000;
+                        }
+                        .doc-badge {
+                            font-size: 14px;
+                            font-weight: 900;
+                            border: 2px solid #000;
+                            display: inline-block;
+                            padding: 2px 14px;
+                            border-radius: 4px;
+                            margin-bottom: 8px;
+                        }
+                        .meta-row {
+                            display: flex;
+                            justify-content: space-between;
+                            font-size: 12px;
+                            font-weight: 800;
+                            border-bottom: 1.5px solid #000;
+                            padding-bottom: 5px;
+                            margin-bottom: 8px;
+                        }
+                        .box-info {
+                            border: 1.5px solid #000;
+                            border-radius: 6px;
+                            padding: 8px;
+                            margin-bottom: 10px;
+                            text-align: right;
+                            font-size: 13px;
+                            font-weight: 700;
+                        }
+                        .amount-container {
+                            margin-top: 6px;
+                            text-align: center;
+                            font-size: 13px;
+                            font-weight: 900;
+                        }
+                        .amount-val {
+                            font-size: 22px;
+                            font-weight: 900;
+                            border: 2px solid #000;
+                            display: inline-block;
+                            padding: 2px 12px;
+                            border-radius: 6px;
+                            margin-top: 3px;
+                            font-family: 'Segoe UI', Arial, sans-serif;
+                            direction: ltr !important;
+                        }
+                        .summary-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-bottom: 12px;
+                            border: 1.5px solid #000;
+                        }
+                        .summary-table th {
+                            border: 1px solid #000;
+                            padding: 4px 2px;
+                            font-size: 10px;
+                            font-weight: 900;
+                            background: #f1f5f9;
+                        }
+                        .summary-table td {
+                            border: 1px solid #000;
+                            padding: 6px 2px;
+                            font-size: 12px;
+                            font-weight: 900;
+                            text-align: center;
+                            font-family: 'Segoe UI', Arial, sans-serif;
+                            direction: ltr !important;
+                            white-space: nowrap;
+                        }
+                        .sign-grid {
+                            display: grid;
+                            grid-template-columns: 1fr 1fr;
+                            gap: 15px;
+                            margin-top: 20px;
+                            font-size: 12px;
+                            font-weight: 800;
+                        }
+                        .sign-line {
+                            border-top: 1.5px solid #000;
+                            padding-top: 4px;
+                            text-align: center;
+                        }
+                        .footer-text {
+                            margin-top: 15px;
+                            border-top: 1px dashed #000;
+                            padding-top: 8px;
+                            font-size: 11px;
+                            font-weight: 700;
+                            color: #333;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="receipt-card">
+                        <div class="shop-header">${shopName}</div>
+                        <div class="doc-badge">سند صرف نقدية</div>
+                        <div class="meta-row">
+                            <span>رقم: ${id}</span>
+                            <span>التاريخ: ${date}</span>
                         </div>
 
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; margin-bottom: 15px; text-align: center; border: 1px solid #000;">
-
-                        <div style="border-left:1px solid #000; padding:5px;">
-
-                            <div style="font-size: 11px;">كان له</div>
-
-                            <div style="font-size: 14px; font-weight: bold;">${balBefore.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-
+                        <div class="box-info">
+                            <div>صرف للسيد: <b style="font-size:14px; font-weight:900;">${payee}</b></div>
+                            <div class="amount-container">
+                                <div>المبلغ المنصرف:</div>
+                                <div class="amount-val">${formatMoney(amount)}</div>
+                            </div>
                         </div>
 
-                        <div style="border-left:1px solid #000; padding:5px;">
+                        <table class="summary-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:33%;">كان له</th>
+                                    <th style="width:34%;">المنصرف</th>
+                                    <th style="width:33%;">المتبقي له</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>${formatMoney(balBefore)}</td>
+                                    <td>${formatMoney(amount)}</td>
+                                    <td>${formatMoney(balAfter)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
 
-                            <div style="font-size: 11px;">المنصرف</div>
-
-                            <div style="font-size: 14px; font-weight: bold;">${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-
+                        <div class="sign-grid">
+                            <div class="sign-line">توقيع المستلم</div>
+                            <div class="sign-line">المدير المالي</div>
                         </div>
 
-                        <div style="padding:5px;">
-
-                            <div style="font-size: 11px;">المتبقي له</div>
-
-                            <div style="font-size: 14px; font-weight: bold;">${balAfter.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-
+                        <div class="footer-text">
+                            <div>${footerMsg}</div>
+                            <div style="font-size:9px; color:#666; margin-top:3px;">نظام بَيَان POS المتكامل</div>
                         </div>
-
                     </div>
-
-                    <div style="display:grid; grid-template-columns:1fr 1fr; margin-top:30px; font-weight:bold; text-align:center; font-size:14px; gap:20px;">
-
-                        <div style="border-top:1px solid #000; padding-top:5px;">توقيع المستلم</div>
-
-                        <div style="border-top:1px solid #000; padding-top:5px;">المدير المالي</div>
-
-                    </div>
-
-                    <div style="text-align:center; margin-top:20px; border-top:1px dashed #000; padding-top:10px; font-size:12px;">
-
-                        <div style="font-weight:bold;">${document.getElementById('printFooterMsg').value || 'شكراً لزيارتكم!'}</div>
-
-                        <div>نظام بيان POS - مبيعات متكامل</div>
-
-                    </div>
-
-                </div>
-
+                    <script>
+                        window.onload = function() {
+                            window.focus();
+                            setTimeout(function() {
+                                window.print();
+                                setTimeout(function() { window.close(); }, 500);
+                            }, 200);
+                        };
+                    <\/script>
+                </body>
+                </html>
             `;
 
-            document.getElementById('receipt-area').innerHTML = content;
-
-            window.print();
-
+            const printWindow = window.open('', '_blank');
+            if (printWindow) {
+                printWindow.document.write(htmlContent);
+                printWindow.document.close();
+            } else {
+                document.getElementById('receipt-area').innerHTML = htmlContent;
+                window.print();
+            }
         }
 
         function printReportData() {

@@ -3,13 +3,12 @@
 //  النسخة المطورة للعمل أوفلاين 100%
 // ============================================================
 
-const CACHE_NAME = 'bayan-pos-v1.0.7';
-const STATIC_CACHE = 'bayan-static-v1.0.7';
-const DYNAMIC_CACHE = 'bayan-dynamic-v1.0.7';
+const CACHE_NAME = 'bayan-pos-v1.0.8';
+const STATIC_CACHE = 'bayan-static-v1.0.8';
+const DYNAMIC_CACHE = 'bayan-dynamic-v1.0.8';
 
-// كافة ملفات النظام الأساسية المتوفرة محلياً (بدون أي ملفات مفقودة تسبب فشل التثبيت)
+// كافة ملفات النظام الأساسية المتوفرة محلياً (بدون تكرار لتفادي خطأ Entry already exists على GitHub Pages)
 const STATIC_FILES = [
-    './',
     './index.html',
     './manifest.json',
     './version.txt',
@@ -17,6 +16,7 @@ const STATIC_FILES = [
     './css/style.css',
     './css/scrollbars.css',
     './css/premium.css',
+    './css/treasury_audit.css',
     './js/store.js',
     './js/core.js',
     './js/utils.js',
@@ -32,8 +32,10 @@ const STATIC_FILES = [
     './js/barcode.js',
     './js/settings.js',
     './js/trash.js',
+    './js/treasury_audit.js',
     './js/init.js',
     './js/print.js',
+    './js/updater.js',
     './lib/html2canvas.min.js',
     './lib/dexie.js',
     './lib/xlsx.full.min.js',
@@ -44,19 +46,22 @@ const STATIC_FILES = [
     './lib/qrcode.min.js',
     './media/logo.png',
     './media/bayan_logo.png',
-    './media/logo.ico',
-    './media/wp_gold.png',
-    './media/wp_emerald.png',
-    './media/wp_blue.png',
-    './media/wp_tech.png'
+    './media/logo.ico'
 ];
 
-// تثبيت السيرفس ووركر وتخزين الملفات الأساسية
+// تثبيت السيرفس ووركر وتخزين الملفات الأساسية بأمان دون توقف
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(STATIC_CACHE).then((cache) => {
-            console.log('[SW] ✅ تخزين الملفات الأساسية بنجاح');
-            return cache.addAll(STATIC_FILES);
+        caches.open(STATIC_CACHE).then(async (cache) => {
+            console.log('[SW] 🚀 جاري تخزين الملفات الأساسية...');
+            // تخزين الملفات واحداً تلو الآخر لتفادي أي خطأ وتخطي المفقود بأمان
+            for (const file of STATIC_FILES) {
+                try {
+                    await cache.add(file);
+                } catch (err) {
+                    console.warn(`[SW] تخطي ملف تعذر كاشه: ${file}`, err.message);
+                }
+            }
         }).then(() => self.skipWaiting())
     );
 });

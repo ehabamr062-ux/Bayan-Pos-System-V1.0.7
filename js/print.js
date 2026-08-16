@@ -99,11 +99,30 @@ function printInvoice(invoiceData) {
     const savedSettings  = JSON.parse(getStore('bayan_print_template_choice') || '{}');
     const templateChoice = invoiceData.template || savedSettings.template || '80mm Standard';
 
-    // بيانات المتجر
-    const shopName    = invoiceData.shopName    || (document.getElementById('shopName')       ? document.getElementById('shopName').value       : 'بيان POS');
-    const shopAddress = invoiceData.shopAddress || (document.getElementById('shopAddress')    ? document.getElementById('shopAddress').value    : '');
-    const shopPhone   = invoiceData.shopPhone   || (document.getElementById('shopPhone1')     ? document.getElementById('shopPhone1').value     : '');
-    const footerMsg   = invoiceData.footerMsg   || (document.getElementById('printFooterMsg') ? document.getElementById('printFooterMsg').value  : 'شكراً لزيارتكم!');
+    // بيانات المتجر والمؤسسة (جلب موثوق من pos_settings وحقول الشاشة)
+    let savedPosSettings = {};
+    try {
+        savedPosSettings = JSON.parse(getStore('pos_settings') || '{}');
+    } catch(e) {}
+
+    const shopName    = invoiceData.shopName    
+        || savedPosSettings.name 
+        || (document.getElementById('shopName') ? document.getElementById('shopName').value.trim() : '') 
+        || 'مؤسستي';
+
+    const shopAddress = invoiceData.shopAddress 
+        || savedPosSettings.address 
+        || (document.getElementById('shopAddress') ? document.getElementById('shopAddress').value.trim() : '');
+
+    const defaultPhone = (savedPosSettings.phones && savedPosSettings.phones.find(p => p && p.trim() !== '')) || '';
+    const shopPhone   = invoiceData.shopPhone   
+        || defaultPhone 
+        || (document.getElementById('shopPhone1') ? document.getElementById('shopPhone1').value.trim() : '');
+
+    const footerMsg   = invoiceData.footerMsg   
+        || savedPosSettings.printFooterMsg 
+        || (document.getElementById('printFooterMsg') ? document.getElementById('printFooterMsg').value.trim() : '') 
+        || 'شكراً لتعاملكم معنا!';
 
     // توحيد وتطبيع الحقول لتغطية كافة أشكال البيانات القادمة من مختلف شاشات التطبيق
     const invoiceNumber = invoiceData.invoiceNumber || invoiceData.id || '';
@@ -223,21 +242,35 @@ function printInvoice(invoiceData) {
             <title>${docTitle} - ${shopName}</title>
             <style>
                 @page { margin: 0; size: ${pageWidth} auto; }
-                body {
-                    margin: 0 auto;
-                    padding: 5px;
-                    width: ${pageWidth};
-                    font-family: 'Arial', sans-serif;
+                *, *::before, *::after { box-sizing: border-box !important; }
+                html, body {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    width: 100% !important;
+                    max-width: ${pageWidth} !important;
+                    font-family: 'Arial', 'Segoe UI', Tahoma, sans-serif;
                     text-align: right;
                     direction: rtl;
                     color: #000;
                     background: #fff;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+                table {
+                    box-sizing: border-box !important;
+                    border-collapse: collapse !important;
                 }
                 table th, table td {
                     color: #000 !important;
+                    box-sizing: border-box !important;
                 }
-                * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
-                @media print { .no-print { display: none !important; } }
+                @media print {
+                    .no-print { display: none !important; }
+                    body {
+                        padding: 0 !important;
+                        margin: 0 auto !important;
+                    }
+                }
             </style>
         </head>
         <body>
@@ -573,33 +606,33 @@ function build80mmStandard(d) {
     const qrHtml = generateOfflineInvoiceQR(qrData, 100);
 
     return `
-    <div style="width:75mm; margin:0; font-family:'Arial','Segoe UI',sans-serif; direction:rtl; padding:5px 6px; color:#000; box-sizing:border-box; line-height:1.5; font-weight:bold;">
-        <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:5px; margin-bottom:8px;">
+    <div style="width:72mm; max-width:72mm; margin:0 auto; font-family:'Arial','Segoe UI',Tahoma,sans-serif; direction:rtl; padding:2mm 3mm; color:#000; box-sizing:border-box; line-height:1.4; font-weight:bold;">
+        <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:5px; margin-bottom:6px;">
             <div style="font-size:18px; font-weight:900;">${d.shopName}</div>
             ${d.shopAddress ? `<div style="font-size:11px; font-weight:bold;">${d.shopAddress}</div>` : ''}
             ${d.shopPhone   ? `<div style="font-size:11px; font-weight:bold;">📞 ${d.shopPhone}</div>` : ''}
-            <div style="font-size:14px; font-weight:900; border:2px solid #000; display:inline-block; padding:2px 15px; margin-top:4px;">${d.docTitle}</div>
+            <div style="font-size:13px; font-weight:900; border:2px solid #000; display:inline-block; padding:2px 14px; margin-top:4px;">${d.docTitle}</div>
         </div>
 
-        <div style="font-size:11px; font-weight:bold; margin-bottom:8px; border-bottom:1px dashed #000; padding-bottom:5px; padding-left:12px;">
-            <div style="display:flex; justify-content:space-between; padding:0 3px;">
+        <div style="font-size:11px; font-weight:bold; margin-bottom:6px; border-bottom:1px dashed #000; padding-bottom:4px;">
+            <div style="display:flex; justify-content:space-between; padding:0 2px;">
                 <span>رقم الفاتورة: #${d.invoiceNumber}</span>
                 <span>التاريخ: ${d.date}</span>
             </div>
-            <div style="display:flex; justify-content:space-between; padding:0 3px;">
+            <div style="display:flex; justify-content:space-between; padding:0 2px;">
                 <span>طريقة الدفع: ${d.invoiceType}</span>
                 <span>الوقت: ${d.time}</span>
             </div>
-            ${!isCash && d.customer ? `<div style="border-top:1px dashed #ccc; margin-top:3px; padding-top:3px; padding-right:3px;">العميل: ${d.customer}</div>` : ''}
-            ${d.cashier  ? `<div style="padding-right:3px;">الكاشير: ${d.cashier}</div>`  : ''}
-            ${d.dueDate  ? `<div style="padding-right:3px;">تاريخ الاستحقاق: ${d.dueDate}</div>`  : ''}
+            ${!isCash && d.customer ? `<div style="border-top:1px dashed #ccc; margin-top:3px; padding-top:2px; padding-right:2px;">العميل: ${d.customer}</div>` : ''}
+            ${d.cashier  ? `<div style="padding-right:2px;">الكاشير: ${d.cashier}</div>`  : ''}
+            ${d.dueDate  ? `<div style="padding-right:2px;">تاريخ الاستحقاق: ${d.dueDate}</div>`  : ''}
         </div>
 
-        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:8px; border:1px solid #000; font-weight:bold; table-layout:fixed; box-sizing:border-box;">
+        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:6px; border:1px solid #000; font-weight:bold; table-layout:fixed; box-sizing:border-box;">
             <colgroup>
-                <col style="width:42%;">
-                <col style="width:17%;">
-                <col style="width:17%;">
+                <col style="width:40%;">
+                <col style="width:18%;">
+                <col style="width:18%;">
                 <col style="width:24%;">
             </colgroup>
             <thead>
@@ -675,7 +708,7 @@ function build80mmCompact(d) {
     const qrHtml = generateOfflineInvoiceQR(qrData, 100);
 
     return `
-    <div style="width:75mm; margin:0; font-family:Arial,sans-serif; direction:rtl; padding:3mm 6mm; color:#000; font-size:13px; font-weight:900; box-sizing:border-box;">
+    <div style="width:72mm; max-width:72mm; margin:0 auto; font-family:Arial,sans-serif; direction:rtl; padding:2mm 3mm; color:#000; font-size:13px; font-weight:900; box-sizing:border-box;">
         <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:5px; margin-bottom:5px;">
             <strong style="font-size:20px; font-weight:900;">${d.shopName}</strong><br>
             ${d.shopAddress ? `<span style="font-size:12px; font-weight:900;">${d.shopAddress}</span><br>` : ''}

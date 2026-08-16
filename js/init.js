@@ -24,8 +24,8 @@ loadData().then(async () => {
         loadWallpaper().catch(e => console.warn("Wallpaper load:", e));
     }
 
-    // 3. تسجيل Service Worker للتشغيل الأوفلاين 100% ودعم التثبيت المباشر على الأندرويد
-    if ('serviceWorker' in navigator && !window.require) {
+    // 3. تسجيل Service Worker للتشغيل الأوفلاين 100% ودعم التثبيت المباشر على الأندرويد (يتطلب خادم http/https)
+    if ('serviceWorker' in navigator && !window.require && (location.protocol === 'http:' || location.protocol === 'https:')) {
         navigator.serviceWorker.register('./service-worker.js')
             .then(reg => console.log('📱 Service Worker registered for Android/Web Offline Mode:', reg.scope))
             .catch(err => console.warn('SW registration failed:', err));

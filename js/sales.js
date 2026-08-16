@@ -1866,58 +1866,110 @@ function resetPurchase() {
 
 // ================= منطق حركة الصنف (History Logic) =================
 
-function handleHistorySearch(query) {
+let historySearchActiveIndex = -1;
 
+function handleHistorySearch(query, event) {
     const resultsDiv = document.getElementById('historySearchResults');
+    const input = document.getElementById('historySearch');
+    if (!resultsDiv || !input) return;
 
+    // التعامل مع أزرار الكيبورد (ArrowDown, ArrowUp, Enter, Escape)
+    if (event) {
+        const items = resultsDiv.querySelectorAll('.result-item');
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (items.length > 0) {
+                historySearchActiveIndex = (historySearchActiveIndex + 1) % items.length;
+                updateHistorySearchHighlight(items);
+            }
+            return;
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (items.length > 0) {
+                historySearchActiveIndex = (historySearchActiveIndex - 1 + items.length) % items.length;
+                updateHistorySearchHighlight(items);
+            }
+            return;
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            if (items.length > 0 && historySearchActiveIndex >= 0 && historySearchActiveIndex < items.length) {
+                items[historySearchActiveIndex].click();
+            } else if (items.length > 0) {
+                items[0].click(); // اختيار أول صنف إذا لم يتم التحديد
+            } else {
+                resultsDiv.style.display = 'none';
+                renderHistoryTable(input.value.trim());
+            }
+            return;
+        } else if (event.key === 'Escape') {
+            resultsDiv.style.display = 'none';
+            historySearchActiveIndex = -1;
+            return;
+        }
+    }
+
+    historySearchActiveIndex = -1;
     resultsDiv.innerHTML = '';
 
-    if (!query) { resultsDiv.style.display = 'none'; renderHistoryTable(); return; } // عرض الكل إذا فارغ
+    if (!query || !query.trim()) { 
+        resultsDiv.style.display = 'none'; 
+        renderHistoryTable(); 
+        return; 
+    }
 
-    // البحث في قاعدة البيانات لاقتراح الاسم
-
+    // البحث في قاعدة البيانات لاقتراح الصنف
     const lowerQuery = query.toLowerCase().trim();
-
-    const filtered = productsDB.filter(p =>
-
+    const filtered = (productsDB || []).filter(p =>
         (p.name && p.name.toLowerCase().includes(lowerQuery)) ||
-
-        (p.barcode && p.barcode.toLowerCase().includes(lowerQuery)) ||
-
+        (p.barcode && String(p.barcode).toLowerCase().includes(lowerQuery)) ||
         (p.sysCode && String(p.sysCode).toLowerCase().includes(lowerQuery)) ||
-
         (p.code && String(p.code).toLowerCase().includes(lowerQuery))
-
-    );
+    ).slice(0, 50);
 
     if (filtered.length > 0) {
-
         resultsDiv.style.display = 'block';
 
-        filtered.forEach(p => {
-
+        filtered.forEach((p, idx) => {
             const div = document.createElement('div');
-
             div.className = 'result-item';
+            div.setAttribute('data-index', idx);
+            div.style.cssText = 'padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; font-weight: 700; transition: 0.15s;';
+            
+            const codeSpan = p.code ? `<span style="font-size:0.75rem; color:#94a3b8; margin-right:8px;">#${p.code}</span>` : '';
+            div.innerHTML = `<span>📦 ${p.name} ${codeSpan}</span><span style="font-size:0.8rem; color:#059669; font-weight:900;">${(p.stock !== undefined ? p.stock : 0)} ${p.unit || ''}</span>`;
 
-            div.innerHTML = `<span>${p.name}</span>`;
+            div.onmouseover = () => {
+                historySearchActiveIndex = idx;
+                updateHistorySearchHighlight(resultsDiv.querySelectorAll('.result-item'));
+            };
 
             div.onclick = () => {
-
-                document.getElementById('historySearch').value = p.name;
-
+                input.value = p.name;
                 resultsDiv.style.display = 'none';
-
-                renderHistoryTable(p.name); // فلترة الجدول
-
+                historySearchActiveIndex = -1;
+                renderHistoryTable(p.name);
             };
 
             resultsDiv.appendChild(div);
-
         });
+    } else { 
+        resultsDiv.style.display = 'none'; 
+    }
+}
 
-    } else { resultsDiv.style.display = 'none'; }
-
+function updateHistorySearchHighlight(items) {
+    items.forEach((item, i) => {
+        if (i === historySearchActiveIndex) {
+            item.classList.add('selected');
+            item.style.backgroundColor = '#f3e8ff';
+            item.style.color = 'var(--main-purple)';
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else {
+            item.classList.remove('selected');
+            item.style.backgroundColor = '';
+            item.style.color = '';
+        }
+    });
 }
 
 function toggleHistoryColumn(index, isVisible) {

@@ -68,7 +68,7 @@
                 setTimeout(() => {
                     showCustomAlert({
                         titleText: '✅ نظامك محدث',
-                        msg: 'أنت تستخدم حالياً أحدث إصدار مستقر من بَيَان POS (v1.0.7).',
+                        msg: 'أنت تستخدم حالياً أحدث إصدار مستقر من بَيَان POS (v1.0.8).',
                         type: 'success'
                     });
                 }, 1000);
@@ -349,15 +349,18 @@
         };
 
         function updateNotifications() {
-            // تحميلهم ديناميكياً من getStore لضمان تحميلهم بعد جاهزية IndexedDB بالكامل
+            // تحميلهم ديناميكياً من getStore مع Fallback لـ localStorage لضمان استقرار كامل حتى لو تم إغلاق البرنامج فوراً
             try {
-                window.acknowledgedLowStock = JSON.parse(getStore('acknowledged_low_stock')) || [];
+                const raw = getStore('acknowledged_low_stock') || localStorage.getItem('acknowledged_low_stock');
+                window.acknowledgedLowStock = raw ? JSON.parse(raw) : [];
             } catch(e) { window.acknowledgedLowStock = []; }
             try {
-                window.acknowledgedDebt = JSON.parse(getStore('acknowledged_debt')) || [];
+                const raw = getStore('acknowledged_debt') || localStorage.getItem('acknowledged_debt');
+                window.acknowledgedDebt = raw ? JSON.parse(raw) : [];
             } catch(e) { window.acknowledgedDebt = []; }
             try {
-                window.acknowledgedDelayed = JSON.parse(getStore('acknowledged_delayed')) || [];
+                const raw = getStore('acknowledged_delayed') || localStorage.getItem('acknowledged_delayed');
+                window.acknowledgedDelayed = raw ? JSON.parse(raw) : [];
             } catch(e) { window.acknowledgedDelayed = []; }
 
             const today = new Date();
@@ -399,21 +402,26 @@
             }
         }
 
-        window.acknowledgeNotification = function(type, id) {
+        window.acknowledgeNotification = function(type, id, returnTab = 'products') {
             if (type === 'low-stock') {
                 if (!window.acknowledgedLowStock.includes(id)) window.acknowledgedLowStock.push(id);
-                setStore('acknowledged_low_stock', JSON.stringify(window.acknowledgedLowStock));
+                const str = JSON.stringify(window.acknowledgedLowStock);
+                setStore('acknowledged_low_stock', str);
+                localStorage.setItem('acknowledged_low_stock', str);
             } else if (type === 'debt') {
                 if (!window.acknowledgedDebt.includes(id)) window.acknowledgedDebt.push(id);
-                setStore('acknowledged_debt', JSON.stringify(window.acknowledgedDebt));
+                const str = JSON.stringify(window.acknowledgedDebt);
+                setStore('acknowledged_debt', str);
+                localStorage.setItem('acknowledged_debt', str);
             } else if (type === 'delayed') {
                 if (!window.acknowledgedDelayed.includes(id)) window.acknowledgedDelayed.push(id);
-                setStore('acknowledged_delayed', JSON.stringify(window.acknowledgedDelayed));
+                const str = JSON.stringify(window.acknowledgedDelayed);
+                setStore('acknowledged_delayed', str);
+                localStorage.setItem('acknowledged_delayed', str);
             }
             updateNotifications();
             if (typeof showNotificationsModal === 'function') {
-                // إعادة فتح المودال مع بقائه في تبويب التنبيهات الجديدة 'new'
-                showNotificationsModal('new');
+                showNotificationsModal(returnTab);
             }
             showToast("✅ تم وضع علامة استلام على التنبيه");
         };
@@ -421,13 +429,19 @@
         window.unacknowledgeNotification = function(type, id) {
             if (type === 'low-stock') {
                 window.acknowledgedLowStock = window.acknowledgedLowStock.filter(x => x !== id);
-                setStore('acknowledged_low_stock', JSON.stringify(window.acknowledgedLowStock));
+                const str = JSON.stringify(window.acknowledgedLowStock);
+                setStore('acknowledged_low_stock', str);
+                localStorage.setItem('acknowledged_low_stock', str);
             } else if (type === 'debt') {
                 window.acknowledgedDebt = window.acknowledgedDebt.filter(x => x !== id);
-                setStore('acknowledged_debt', JSON.stringify(window.acknowledgedDebt));
+                const str = JSON.stringify(window.acknowledgedDebt);
+                setStore('acknowledged_debt', str);
+                localStorage.setItem('acknowledged_debt', str);
             } else if (type === 'delayed') {
                 window.acknowledgedDelayed = window.acknowledgedDelayed.filter(x => x !== id);
-                setStore('acknowledged_delayed', JSON.stringify(window.acknowledgedDelayed));
+                const str = JSON.stringify(window.acknowledgedDelayed);
+                setStore('acknowledged_delayed', str);
+                localStorage.setItem('acknowledged_delayed', str);
             }
             updateNotifications();
             if (typeof showNotificationsModal === 'function') {
@@ -436,9 +450,23 @@
             showToast("🔄 تم استعادة التنبيه للنشط");
         };
 
-        window.acknowledgeAllNotifications = function() {
-            const today = new Date();
+        window.acknowledgeAllProductsNotifications = function() {
             const allLowStock = productsDB.filter(p => (parseFloat(p.stock) || 0) <= (parseFloat(p.minStock) || 5));
+            allLowStock.forEach(p => {
+                if (!window.acknowledgedLowStock.includes(p.id)) window.acknowledgedLowStock.push(p.id);
+            });
+            const str = JSON.stringify(window.acknowledgedLowStock);
+            setStore('acknowledged_low_stock', str);
+            localStorage.setItem('acknowledged_low_stock', str);
+            updateNotifications();
+            if (typeof showNotificationsModal === 'function') {
+                showNotificationsModal('products');
+            }
+            showToast("✅ تم تأكيد استلام كافة نواقص البضاعة!", "success");
+        };
+
+        window.acknowledgeAllAccountsNotifications = function() {
+            const today = new Date();
             const allDebtAccounts = accounts.filter(a => {
                 const debit = parseFloat(a.debit) || 0;
                 const credit = parseFloat(a.credit) || 0;
@@ -449,15 +477,12 @@
                 const balance = (parseFloat(a.debit) || 0) - (parseFloat(a.credit) || 0);
                 if (!((a.type === 'client' || a.type === 'mixed') && balance > 0)) return false;
                 const lastTrans = transactions.filter(t => t.partnerId === a.id || t.account === a.name).sort((x, y) => new Date(y.date || y.timestamp) - new Date(x.date || x.timestamp))[0];
-                if (!lastTrans) return true; // الحسابات التي لم تسدد أي عملية سابقة تعتبر متأخرة
+                if (!lastTrans) return true;
                 const lastDate = new Date(lastTrans.date || lastTrans.timestamp);
                 const diffDays = Math.ceil((today - lastDate) / (1000 * 60 * 60 * 24));
                 return diffDays > 30;
             });
 
-            allLowStock.forEach(p => {
-                if (!window.acknowledgedLowStock.includes(p.id)) window.acknowledgedLowStock.push(p.id);
-            });
             allDebtAccounts.forEach(a => {
                 if (!window.acknowledgedDebt.includes(a.id)) window.acknowledgedDebt.push(a.id);
             });
@@ -465,15 +490,23 @@
                 if (!window.acknowledgedDelayed.includes(a.id)) window.acknowledgedDelayed.push(a.id);
             });
 
-            setStore('acknowledged_low_stock', JSON.stringify(window.acknowledgedLowStock));
-            setStore('acknowledged_debt', JSON.stringify(window.acknowledgedDebt));
-            setStore('acknowledged_delayed', JSON.stringify(window.acknowledgedDelayed));
+            const debtStr = JSON.stringify(window.acknowledgedDebt);
+            const delayedStr = JSON.stringify(window.acknowledgedDelayed);
+            setStore('acknowledged_debt', debtStr);
+            localStorage.setItem('acknowledged_debt', debtStr);
+            setStore('acknowledged_delayed', delayedStr);
+            localStorage.setItem('acknowledged_delayed', delayedStr);
 
             updateNotifications();
             if (typeof showNotificationsModal === 'function') {
-                showNotificationsModal('new');
+                showNotificationsModal('accounts');
             }
-            showToast("✅ تم استلام وقراءة جميع التنبيهات بنجاح!", "success");
+            showToast("✅ تم تأكيد استلام جميع تنبيهات الحسابات!", "success");
+        };
+
+        window.acknowledgeAllNotifications = function() {
+            window.acknowledgeAllProductsNotifications();
+            window.acknowledgeAllAccountsNotifications();
         };
 
         window.resetAcknowledgedNotifications = function() {
@@ -483,8 +516,14 @@
             removeStore('acknowledged_low_stock');
             removeStore('acknowledged_debt');
             removeStore('acknowledged_delayed');
+            localStorage.removeItem('acknowledged_low_stock');
+            localStorage.removeItem('acknowledged_debt');
+            localStorage.removeItem('acknowledged_delayed');
             updateNotifications();
-            showToast("🔄 تم إعادة ضبط كافة التنبيهات");
+            if (typeof showNotificationsModal === 'function') {
+                showNotificationsModal('archived');
+            }
+            showToast("🔄 تم تصفير الأرشيف واستعادة كافة التنبيهات للقوائم النشطة");
         };
 
         function getTransactionDateTime(dateId, timeId) {
@@ -1887,14 +1926,6 @@
 
         function closeSubscription() {
             document.getElementById('subscriptionModal').classList.add('hidden');
-        }
-
-        function checkUpdates() {
-            if (typeof window.checkGitHubReleases === 'function') {
-                window.checkGitHubReleases(true);
-            } else if (typeof window.checkForBayanUpdatesManual === 'function') {
-                window.checkForBayanUpdatesManual();
-            }
         }
 
         // --- فلترة محتويات السلة (Cart Filter Logic) ---

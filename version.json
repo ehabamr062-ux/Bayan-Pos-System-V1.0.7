@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "cacheVersion": "v1.0",
-  "releaseDate": "2026-07-15",
-  "notes": "الإصدار الأول النهائي والأكثر استقراراً"
+  "version": "1.0.8",
+  "cacheVersion": "v1.0.8",
+  "releaseDate": "2026-08-16",
+  "appName": "Bayan POS"
 }
