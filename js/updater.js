@@ -232,7 +232,7 @@
     // حالة نظام التحديث
     // =========================================================================
     const state = {
-        currentVersion: '1.0.8',
+        currentVersion: '2.0.0',
         latestVersion: null,
         releaseNotes: '',
         downloadUrl: '',
@@ -261,7 +261,7 @@
     }
 
     function getCurrentAppVersion() {
-        return window.appVersion || '1.0.8';
+        return window.appVersion || '2.0.0';
     }
 
     function fmtNotes(notes) {
@@ -702,36 +702,60 @@
 
             if (!res.ok) return;
             const data = await res.json();
-            if (!data || !data.message) return;
+            if (!data) return;
 
-            window.latestCloudAnnouncement = data;
+            // دعم تلقي رسالة واحدة (Object) أو قائمة رسائل سحابية (Array)
+            const items = Array.isArray(data) ? data : [data];
+            if (items.length === 0) return;
 
-            // حفظ الإشعار في سجل التاريخ السحابي إذا لم يكن موجوداً مسبقاً
-            const existingIdx = window.cloudAnnouncementsHistory.findIndex(a => a.id === data.id);
-            if (existingIdx >= 0) {
-                window.cloudAnnouncementsHistory[existingIdx] = { ...data, updatedAt: new Date().toISOString() };
-            } else {
-                window.cloudAnnouncementsHistory.unshift({ ...data, receivedAt: new Date().toISOString() });
-            }
+            let hasNewActive = false;
 
+            items.forEach(item => {
+                if (!item || !item.message) return;
+                const itemId = String(item.id || item.title || 'announcement_1');
+                const formattedItem = {
+                    ...item,
+                    id: itemId,
+                    title: item.title || 'إشعار سحابي',
+                    receivedAt: item.receivedAt || new Date().toISOString()
+                };
+
+                const existingIdx = window.cloudAnnouncementsHistory.findIndex(a => String(a.id) === itemId);
+                if (existingIdx >= 0) {
+                    window.cloudAnnouncementsHistory[existingIdx] = {
+                        ...window.cloudAnnouncementsHistory[existingIdx],
+                        ...formattedItem,
+                        updatedAt: new Date().toISOString()
+                    };
+                } else {
+                    window.cloudAnnouncementsHistory.push(formattedItem);
+                }
+
+                if (formattedItem.active) {
+                    window.latestCloudAnnouncement = formattedItem;
+                    hasNewActive = true;
+
+                    // فحص الظهور المنبثق التلقائي (مرة واحدة فقط كحد أقصى)
+                    const seenKey = 'bayan_seen_count_' + itemId;
+                    const viewCount = parseInt(localStorage.getItem(seenKey) || '0', 10);
+                    const maxViews = formattedItem.alwaysShow ? Infinity : (formattedItem.maxViews !== undefined ? parseInt(formattedItem.maxViews, 10) : 1);
+
+                    if (viewCount < maxViews) {
+                        setTimeout(() => {
+                            showCloudBroadcastModal(formattedItem, seenKey, viewCount);
+                        }, 2500);
+                    }
+                }
+            });
+
+            // حفظ السجل كاملاً في التخزين المحلي
             const historyStr = JSON.stringify(window.cloudAnnouncementsHistory);
             setStore('bayan_cloud_announcements_history', historyStr);
             localStorage.setItem('bayan_cloud_announcements_history', historyStr);
 
-            if (!data.active) return;
-
-            const seenKey = 'bayan_seen_count_' + (data.id || 'default');
-            const viewCount = parseInt(localStorage.getItem(seenKey) || '0', 10);
-            
-            // تحديد الحد الأقصى لعدد مرات الظهور (افتراضياً 4 مرات إذا لم يحدد في الملف)
-            const maxViews = data.alwaysShow ? Infinity : (data.maxViews !== undefined ? parseInt(data.maxViews, 10) : 4);
-
-            if (viewCount >= maxViews) return;
-
-            // عرض نافذة الإشعار السحابي
-            setTimeout(() => {
-                showCloudBroadcastModal(data, seenKey, viewCount);
-            }, 2500);
+            if (typeof updateNotifications === 'function') {
+                updateNotifications();
+            }
         } catch (e) {
             // صامت في حالة عدم وجود إنترنت
         }

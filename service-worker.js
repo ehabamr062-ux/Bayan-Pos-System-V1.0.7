@@ -3,9 +3,9 @@
 //  النسخة المطورة للعمل أوفلاين 100%
 // ============================================================
 
-const CACHE_NAME = 'bayan-pos-v1.0.8';
-const STATIC_CACHE = 'bayan-static-v1.0.8';
-const DYNAMIC_CACHE = 'bayan-dynamic-v1.0.8';
+const CACHE_NAME = 'bayan-pos-v2.0.0';
+const STATIC_CACHE = 'bayan-static-v2.0.0';
+const DYNAMIC_CACHE = 'bayan-dynamic-v2.0.0';
 
 // كافة ملفات النظام الأساسية المتوفرة محلياً (بدون تكرار لتفادي خطأ Entry already exists على GitHub Pages)
 const STATIC_FILES = [
@@ -46,7 +46,13 @@ const STATIC_FILES = [
     './lib/qrcode.min.js',
     './media/logo.png',
     './media/bayan_logo.png',
-    './media/logo.ico'
+    './media/logo.ico',
+    './media/wallpapers/mountains.jpg',
+    './media/wallpapers/burj.jpg',
+    './media/wallpapers/beach.jpg',
+    './media/wallpapers/night.jpg',
+    './media/wallpapers/office.jpg',
+    './media/wallpapers/relax.jpg'
 ];
 
 // تثبيت السيرفس ووركر وتخزين الملفات الأساسية بأمان دون توقف

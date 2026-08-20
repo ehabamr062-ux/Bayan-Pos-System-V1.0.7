@@ -65,7 +65,14 @@ async function saveSettings() {
         taxPercent: parseFloat(document.getElementById('appTaxPercent').value) || 0,
         taxEnabled: document.getElementById('appTaxEnabled').checked,
         allowBackdating: document.getElementById('allowBackdating').checked,
-        allowHistoryEdit: document.getElementById('allowHistoryEdit').checked
+        allowHistoryEdit: document.getElementById('allowHistoryEdit').checked,
+        // Business Profile & UI Customization Settings
+        businessType: document.getElementById('appBusinessType') ? document.getElementById('appBusinessType').value : "clothing",
+        directToSalesOnLogin: document.getElementById('directToSalesOnLogin') ? document.getElementById('directToSalesOnLogin').checked : true,
+        enableVariantsMatrix: document.getElementById('enableVariantsMatrix') ? document.getElementById('enableVariantsMatrix').checked : true,
+        splitWholesaleRetailReports: document.getElementById('splitWholesaleRetailReports') ? document.getElementById('splitWholesaleRetailReports').checked : true,
+        enableSimpleStaffDashboard: document.getElementById('enableSimpleStaffDashboard') ? document.getElementById('enableSimpleStaffDashboard').checked : true,
+        visibleDashboardSections: getDashboardSectionsVisibilityState()
     };
     setStore('pos_settings', JSON.stringify(settings));
 
@@ -94,9 +101,187 @@ async function saveSettings() {
     if (typeof renderQuickItems === 'function') renderQuickItems();
     if (typeof populatePaymentMethodSelects === 'function') populatePaymentMethodSelects();
     if (typeof updateAllCurrencyLabels === 'function') updateAllCurrencyLabels();
+    if (typeof applyBusinessTypeUI === 'function') applyBusinessTypeUI();
 
     await saveData();
-    showToast("✅ تم حفظ جميع الإعدادات بنجاح!", "success");
+    showToast("✅ تم حفظ جميع الإعدادات وتخصيصات الأقسام بنجاح!", "success");
+}
+
+function getDashboardSectionsVisibilityState() {
+    const map = {};
+    document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
+        const sec = chk.getAttribute('data-sec');
+        if (sec) map[sec] = chk.checked;
+    });
+    return map;
+}
+
+function setAllDashboardSectionsVisibility(visible = true) {
+    document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
+        chk.checked = visible;
+    });
+    applyBusinessTypeUI();
+    showToast(visible ? "✅ تم تحديد إظهار جميع الأقسام" : "⚠️ تم إلغاء تحديد الأقسام", "info");
+}
+
+function applyStaffPresetVisibility() {
+    // الأقسام اليومية السريعة (الموصى بها للكاشير: البيع، مرتجع البيع، القبض، الصرف، تقرير الحركة، الفواتير، الحسابات، البضاعة، كشف الحساب)
+    const activeStaffSections = ['sales', 'sales-return', 'receipt', 'disbursement', 'daily-report', 'invoices', 'accounts', 'inventory', 'statement'];
+    document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
+        const sec = chk.getAttribute('data-sec');
+        chk.checked = activeStaffSections.includes(sec);
+    });
+    applyBusinessTypeUI();
+    showToast("✨ تم تطبيق التشكيل السريع الموصى به للكاشير بنجاح!", "success");
+}
+
+function selectBusinessType(type) {
+    const hiddenInput = document.getElementById('appBusinessType');
+    if (hiddenInput) hiddenInput.value = type;
+
+    // تحديث المظهر المرئي للكروت
+    document.querySelectorAll('.business-type-card').forEach(card => {
+        card.classList.remove('active');
+        card.style.borderColor = '#e2e8f0';
+        card.style.boxShadow = 'none';
+        const badge = card.querySelector('.btype-check-badge');
+        if (badge) {
+            badge.style.background = '#e2e8f0';
+            badge.style.color = '#94a3b8';
+            badge.innerText = '';
+        }
+    });
+
+    const activeCard = document.getElementById('btype-card-' + type);
+    if (activeCard) {
+        activeCard.classList.add('active');
+        activeCard.style.borderColor = '#10b981';
+        activeCard.style.boxShadow = '0 10px 25px rgba(16, 185, 129, 0.15)';
+        const badge = activeCard.querySelector('.btype-check-badge');
+        if (badge) {
+            badge.style.background = '#10b981';
+            badge.style.color = 'white';
+            badge.innerText = '✓';
+        }
+    }
+
+    // ضبط الخيارات التلقائية والأقسام بناءً على نوع النشاط
+    const variantsCheck = document.getElementById('enableVariantsMatrix');
+    if (variantsCheck) {
+        variantsCheck.checked = (type === 'clothing');
+    }
+
+    const directSalesCheck = document.getElementById('directToSalesOnLogin');
+    if (directSalesCheck) {
+        directSalesCheck.checked = (type === 'clothing');
+    }
+
+    // لأنشطة السوبر ماركت والتجارة العامة: فتح وإظهار كافة الأقسام الـ 25 تلقائياً
+    if (type === 'supermarket' || type === 'general') {
+        document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
+            chk.checked = true;
+        });
+    } else if (type === 'clothing') {
+        // للملابس: تفعيل نظام المقاسات والألوان وتطبيق الأقسام الموصى بها
+        const activeStaffSections = ['sales', 'sales-return', 'receipt', 'disbursement', 'daily-report', 'invoices', 'accounts', 'inventory', 'statement'];
+        document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
+            const sec = chk.getAttribute('data-sec');
+            chk.checked = activeStaffSections.includes(sec);
+        });
+    }
+
+    applyBusinessTypeUI();
+
+    if (typeof showToast === 'function') {
+        const names = { 
+            clothing: 'ملابس وأحذية وشنط 👕 (نظام المقاسات والألوان مفعل)', 
+            supermarket: 'سوبر ماركت ومواد غذائية 🛒 (كافة الأقسام الـ 25 مفعلة)', 
+            general: 'تجارة عامة وجملة وتوزيع 📦 (كافة الأقسام الـ 25 مفعلة)' 
+        };
+        showToast(`🎯 تم اختيار نشاط: ${names[type] || type}`, 'info');
+    }
+}
+
+function applyBusinessTypeUI() {
+    const settings = JSON.parse(getStore('pos_settings') || '{}');
+    const type = settings.businessType || 'clothing';
+    const enableVariants = settings.enableVariantsMatrix !== undefined ? !!settings.enableVariantsMatrix : (type === 'clothing');
+    const sectionsMap = settings.visibleDashboardSections || null;
+
+    // 1. التحكم في مصفوفة المقاسات والألوان
+    if (enableVariants) {
+        document.body.classList.add('bayan-variants-enabled');
+        document.body.classList.remove('bayan-variants-disabled');
+    } else {
+        document.body.classList.remove('bayan-variants-enabled');
+        document.body.classList.add('bayan-variants-disabled');
+    }
+
+    // 2. تطبيق إظهار وإخفاء كل قسم بشكل دقيق ونظيف
+    const allKnownSections = [
+        'sales', 'sales-return', 'receipt', 'disbursement', 'daily-report',
+        'invoices', 'accounts', 'inventory', 'product-inquiry', 'treasury',
+        'statement', 'calculator', 'analysis', 'new-account', 'new-item',
+        'price-tracking', 'ai-assistant', 'shortcuts', 'adjustment',
+        'history', 'price-mgmt', 'transfer', 'warehouse-report', 'purchase', 'purchase-return'
+    ];
+    const activeClothingSections = ['sales', 'sales-return', 'receipt', 'disbursement', 'daily-report', 'invoices', 'accounts', 'inventory', 'statement'];
+
+    allKnownSections.forEach(secKey => {
+        let isVisible = true;
+        if (sectionsMap && sectionsMap[secKey] !== undefined) {
+            isVisible = !!sectionsMap[secKey];
+        } else if (type === 'clothing') {
+            isVisible = activeClothingSections.includes(secKey);
+        }
+        const hideClass = `bayan-hide-sec-${secKey}`;
+        if (!isVisible) {
+            document.body.classList.add(hideClass);
+        } else {
+            document.body.classList.remove(hideClass);
+        }
+    });
+
+    // 3. مزامنة checkboxes في قسم الإعدادات
+    document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
+        const sec = chk.getAttribute('data-sec');
+        if (sec) {
+            if (sectionsMap && sectionsMap[sec] !== undefined) {
+                chk.checked = !!sectionsMap[sec];
+            } else if (type === 'clothing') {
+                chk.checked = activeClothingSections.includes(sec);
+            } else {
+                chk.checked = true;
+            }
+        }
+    });
+
+    // 4. التحكم في الواجهة الرئيسية المبسطة
+    const simpleDashboard = settings.enableSimpleStaffDashboard !== undefined ? !!settings.enableSimpleStaffDashboard : true;
+    if (simpleDashboard) {
+        document.body.classList.add('bayan-simple-dashboard-mode');
+    } else {
+        document.body.classList.remove('bayan-simple-dashboard-mode');
+    }
+
+    // 5. تحديث كارت نوع النشاط في أعلى يسار شاشة تسجيل الدخول
+    const loginBadgeName = document.getElementById('loginBusinessName');
+    const loginBadgeIcon = document.getElementById('loginBusinessIcon');
+    if (loginBadgeName && loginBadgeIcon) {
+        if (type === 'supermarket') {
+            loginBadgeName.innerText = 'سوبر ماركت ومواد غذائية';
+            loginBadgeIcon.innerText = '🛒';
+            loginBadgeIcon.style.background = 'linear-gradient(135deg, #0284c7, #0369a1)';
+        } else if (type === 'general') {
+            loginBadgeName.innerText = 'تجارة عامة وجملة وتوزيع';
+            loginBadgeIcon.innerText = '📦';
+            loginBadgeIcon.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
+        } else {
+            loginBadgeName.innerText = 'ملابس وأحذية وشنط';
+            loginBadgeIcon.innerText = '👕';
+            loginBadgeIcon.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        }
+    }
 }
 
 function loadSettings() {
@@ -136,6 +321,34 @@ function loadSettings() {
     if (settings.taxEnabled !== undefined) document.getElementById('appTaxEnabled').checked = settings.taxEnabled;
     if (settings.allowBackdating !== undefined) document.getElementById('allowBackdating').checked = settings.allowBackdating;
     if (settings.allowHistoryEdit !== undefined) document.getElementById('allowHistoryEdit').checked = settings.allowHistoryEdit;
+
+    // Load Business Profile Settings
+    const bType = settings.businessType || 'clothing';
+    selectBusinessType(bType);
+    if (settings.directToSalesOnLogin !== undefined && document.getElementById('directToSalesOnLogin')) {
+        document.getElementById('directToSalesOnLogin').checked = settings.directToSalesOnLogin;
+    }
+    if (settings.enableVariantsMatrix !== undefined && document.getElementById('enableVariantsMatrix')) {
+        document.getElementById('enableVariantsMatrix').checked = settings.enableVariantsMatrix;
+    }
+    if (settings.splitWholesaleRetailReports !== undefined && document.getElementById('splitWholesaleRetailReports')) {
+        document.getElementById('splitWholesaleRetailReports').checked = settings.splitWholesaleRetailReports;
+    }
+    if (settings.enableSimpleStaffDashboard !== undefined && document.getElementById('enableSimpleStaffDashboard')) {
+        document.getElementById('enableSimpleStaffDashboard').checked = settings.enableSimpleStaffDashboard;
+    }
+
+    // Load Checkboxes for Dashboard Sections
+    const secMap = settings.visibleDashboardSections;
+    if (secMap && typeof secMap === 'object') {
+        document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
+            const sec = chk.getAttribute('data-sec');
+            if (sec && secMap[sec] !== undefined) {
+                chk.checked = !!secMap[sec];
+            }
+        });
+    }
+    applyBusinessTypeUI();
 
     if (typeof updateAllCurrencyLabels === 'function') updateAllCurrencyLabels();
 
@@ -346,6 +559,7 @@ function renderUsersTable() {
     const tbody = document.getElementById('usersTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
+    let rowsHtml = '';
     users.forEach((u, idx) => {
         const isSuperAdmin = (u.id === 1);
         const isFrozen = !!u.isFrozen;
@@ -357,7 +571,7 @@ function renderUsersTable() {
             ? `<span style="background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; padding: 3px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 900;">❄️ مجمّد</span>`
             : `<span style="background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 3px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 900;">🟢 نشط</span>`;
 
-        tbody.innerHTML += `
+        rowsHtml += `
             <tr style="${isFrozen ? 'opacity: 0.65; background: #fff5f5;' : ''}">
                 <td style="font-weight: 800; color: #1e293b;">${u.name}</td>
                 <td style="font-family: monospace; letter-spacing: 1px; text-align: center; font-weight: bold;">${(u.role === 'admin' && !isSuperAdmin) ? '****' : u.pin}</td>
@@ -385,6 +599,7 @@ function renderUsersTable() {
             </tr>
         `;
     });
+    tbody.innerHTML = rowsHtml;
 }
 
 function toggleFreezeUser(idx) {
@@ -953,9 +1168,10 @@ function renderWarehousesTable() {
         warehouses = [{ id: Date.now(), name: 'المخزن الرئيسي', address: 'المقر الرئيسي' }];
     }
 
+    let rowsHtml = '';
     warehouses.forEach((w, idx) => {
         const isCurrent = currentUser && currentUser.warehouseName === w.name;
-        tbody.innerHTML += `
+        rowsHtml += `
             <tr style="border-bottom: 1px solid #f1f5f9; ${isCurrent ? 'background: #fffdf0;' : ''}">
                 <td style="padding: 10px 12px; font-weight: 800; color: #1e293b; white-space: nowrap;">
                     ${w.name} ${isCurrent ? '<span style="background: #f59e0b; color: #1a1600; padding: 2px 6px; border-radius: 6px; font-size: 0.72rem; font-weight: 900; margin-right: 4px; display: inline-block;">نشط</span>' : ''}
@@ -970,6 +1186,7 @@ function renderWarehousesTable() {
             </tr>
         `;
     });
+    tbody.innerHTML = rowsHtml;
 
     updateSettingsWarehouseSelect();
     if (typeof updateWarehousesSummaryBoard === 'function') updateWarehousesSummaryBoard();

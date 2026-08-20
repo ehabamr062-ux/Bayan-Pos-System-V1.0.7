@@ -1017,6 +1017,7 @@ data.forEach(store => {
                 }
                 if (['sales', 'purchase', 'sales-return', 'purchase-return', 'receipt', 'disbursement'].includes(targetTab.type)) {
                     if (typeof populatePaymentMethodSelects === 'function') populatePaymentMethodSelects();
+                    if (targetTab.type === 'sales' && typeof loadPinnedPriceLevel === 'function') loadPinnedPriceLevel();
                 }
                 if (targetTab.type === 'inventory') {
                     renderInventoryTable();
@@ -2017,9 +2018,9 @@ data.forEach(store => {
             // تحديث معرض الخلفيات المخصصة
             await loadCustomWallpapersToGallery();
 
-            // 🌟 الإلزام التلقائي: إذا لم يكن لدى العميل أي خلفية مختارة (أول مرة يفتح)، نطبق خلفية فخمة تلقائياً بدلاً من السادة
+            // 🌟 الإلزام التلقائي: إذا لم يكن لدى العميل أي خلفية مختارة (أول مرة يفتح)، نطبق خلفية الطبيعة الجبلية تلقائياً
             if (!saved || saved === 'none') {
-                saved = 'media/wallpapers/burj.jpg';
+                saved = 'media/wallpapers/mountains.jpg';
                 setStore('bayan_wallpaper', saved);
                 setStore('bayan_wallpaper_type', 'preset');
             }
@@ -2114,7 +2115,7 @@ data.forEach(store => {
                 return;
             }
 
-            const version = '2.5.0';
+            const version = window.appVersion || '2.0.0';
 
             const message = `السلام عليكم\nأريد الاشتراك في Bayan POS\n\nاسم المحل: ${shopName}\nMachine ID: ${mId}\nرقم الهاتف: ${phone}\nالباقة: ${plan}\nإصدار البرنامج: ${version}\n\nتم تحويل المبلغ.`;
             
@@ -2497,6 +2498,17 @@ data.forEach(store => {
         window.showNotificationsModal = function(activeTab = 'products') {
             const today = new Date();
             const allLowStock = productsDB.filter(p => (parseFloat(p.stock) || 0) <= (parseFloat(p.minStock) || 5));
+            
+            // فحص تواريخ الصلاحية
+            const allExpiring = productsDB.filter(p => {
+                if (!p.expiry) return false;
+                const exp = new Date(p.expiry);
+                if (isNaN(exp.getTime())) return false;
+                exp.setHours(0, 0, 0, 0);
+                const diffDays = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+                return diffDays <= 30;
+            });
+
             const allDebtAccounts = accounts.filter(a => {
                 const debit = parseFloat(a.debit) || 0;
                 const credit = parseFloat(a.credit) || 0;
@@ -2518,9 +2530,12 @@ data.forEach(store => {
                 return diffDays > 30;
             });
 
-            // تقسيم البضاعة والحسابات إلى نشط ومستلم
+            // تقسيم البضاعة والصلاحية والحسابات إلى نشط ومستلم
             const activeLowStock = allLowStock.filter(p => !window.acknowledgedLowStock.includes(p.id));
             const archivedLowStock = allLowStock.filter(p => window.acknowledgedLowStock.includes(p.id));
+
+            const activeExpiring = allExpiring.filter(p => !window.acknowledgedExpiry.includes(p.id));
+            const archivedExpiring = allExpiring.filter(p => window.acknowledgedExpiry.includes(p.id));
 
             const activeDebt = allDebtAccounts.filter(a => !window.acknowledgedDebt.includes(a.id));
             const archivedDebt = allDebtAccounts.filter(a => window.acknowledgedDebt.includes(a.id));
@@ -2528,12 +2543,14 @@ data.forEach(store => {
             const activeDelayed = allDelayed.filter(a => !window.acknowledgedDelayed.includes(a.id));
             const archivedDelayed = allDelayed.filter(a => window.acknowledgedDelayed.includes(a.id));
 
+            const activeProductsTotal = activeLowStock.length + activeExpiring.length;
             const activeAccountsTotal = activeDebt.length + activeDelayed.length;
-            const totalActiveCount = activeLowStock.length + activeAccountsTotal;
-            const totalArchivedCount = archivedLowStock.length + archivedDebt.length + archivedDelayed.length;
+            const totalActiveCount = activeProductsTotal + activeAccountsTotal;
+            const totalArchivedCount = archivedLowStock.length + archivedExpiring.length + archivedDebt.length + archivedDelayed.length;
 
             const createRows = (items, type, isArchived) => items.map(item => {
                 const isProd = type === 'low-stock';
+                const isExpiry = type === 'expiry';
                 const isDelayed = type === 'delayed';
                 const name = item.name;
                 let value = "";
@@ -2541,6 +2558,17 @@ data.forEach(store => {
 
                 if (isProd) {
                     value = `<span style="font-size:1.1rem; font-weight:900; color:#ef4444; direction:ltr; display:inline-block;">${item.stock}</span> <span style="font-size:0.75rem; color:#64748b;">(الحد: ${item.minStock || 5})</span>`;
+                } else if (isExpiry) {
+                    const exp = new Date(item.expiry);
+                    exp.setHours(0, 0, 0, 0);
+                    const diffDays = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+                    if (diffDays <= 0) {
+                        value = `<span style="font-size:0.82rem; font-weight:900; color:#dc2626; background:#fee2e2; padding:3px 8px; border-radius:6px; display:inline-block;">❌ منتهي الصلاحية</span>`;
+                        extra = `<br><span style="font-size:0.75rem; color:#dc2626; font-weight:bold;">انتهى بتاريخ ${item.expiry} (منذ ${Math.abs(diffDays)} يوم)</span>`;
+                    } else {
+                        value = `<span style="font-size:0.82rem; font-weight:900; color:#d97706; background:#fef3c7; padding:3px 8px; border-radius:6px; display:inline-block;">⏳ قارب على الانتهاء</span>`;
+                        extra = `<br><span style="font-size:0.75rem; color:#d97706; font-weight:bold;">ينتهي خلال ${diffDays} يوم (بتاريخ ${item.expiry})</span>`;
+                    }
                 } else {
                     const balance = (parseFloat(item.debit) || 0) - (parseFloat(item.credit) || 0);
                     value = `<span style="font-size:1.05rem; font-weight:900; color:#e11d48; direction:ltr; display:inline-block;">${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>`;
@@ -2560,7 +2588,7 @@ data.forEach(store => {
                 <tr style="border-bottom: 1px solid #f1f5f9; transition: 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
                     <td style="padding: 12px 14px; font-weight: bold; color: #1e293b; text-align: right;">
                         <div style="display:flex; align-items:center; gap:10px;">
-                            <span style="font-size:1.2rem;">${isProd ? '📦' : (isDelayed ? '⚠️' : '💳')}</span>
+                            <span style="font-size:1.2rem;">${isProd ? '📦' : (isExpiry ? '📅' : (isDelayed ? '⚠️' : '💳'))}</span>
                             <div>
                                 <div style="font-weight:900; font-size:0.95rem; color:#0f172a;">${name}</div>
                                 ${extra}
@@ -2571,16 +2599,16 @@ data.forEach(store => {
                     <td style="padding: 12px 14px; text-align: center;">
                         ${!isArchived ? `
                             <div style="display:flex; gap:6px; justify-content:center; align-items:center;">
-                                ${!isProd ? `<button class="tool-btn" style="background:#3b82f6; color:white; border-radius:8px; border:none; padding: 6px 12px; font-weight:800; font-size:0.8rem; cursor:pointer;" onclick="openStatementFromNotify('${item.id}')" title="عرض كشف حساب العميل">📄 كشف</button>` : ''}
+                                ${(!isProd && !isExpiry) ? `<button class="tool-btn" style="background:#3b82f6; color:white; border-radius:8px; border:none; padding: 6px 12px; font-weight:800; font-size:0.8rem; cursor:pointer;" onclick="openStatementFromNotify('${item.id}')" title="عرض كشف حساب العميل">📄 كشف</button>` : ''}
                                 <button class="tool-btn" style="background:linear-gradient(135deg, #10b981, #059669); color:white; border-radius:8px; padding: 6px 14px; font-size: 0.8rem; font-weight: 900; border: none; cursor: pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 6px rgba(16,185,129,0.3);" 
-                                        onclick="acknowledgeNotification('${type}', ${isProd ? item.id : `'${item.id}'` }, '${activeTab}')" title="تأكيد الاستلام ونقله لسجل الاستلام">
+                                        onclick="acknowledgeNotification('${type}', ${(isProd || isExpiry) ? item.id : `'${item.id}'` }, '${activeTab}')" title="تأكيد الاستلام ونقله لسجل الاستلام">
                                     <span style="font-size:0.9rem;">✔️</span> استلام
                                 </button>
                             </div>
                         ` : `
                             <div style="display:flex; gap:8px; justify-content:center; align-items:center;">
                                 <span style="color: #10b981; font-weight: 900; font-size: 0.85rem;">✔️ مستلم</span>
-                                <button class="tool-btn" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; border-radius:8px; padding:4px 10px; font-size:0.75rem; font-weight:bold; cursor:pointer;" onclick="unacknowledgeNotification('${type}', ${isProd ? item.id : `'${item.id}'` })" title="إعادة التنبيه إلى القائمة النشطة">إعادة 🔄</button>
+                                <button class="tool-btn" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; border-radius:8px; padding:4px 10px; font-size:0.75rem; font-weight:bold; cursor:pointer;" onclick="unacknowledgeNotification('${type}', ${(isProd || isExpiry) ? item.id : `'${item.id}'` })" title="إعادة التنبيه إلى القائمة النشطة">إعادة 🔄</button>
                             </div>
                         `}
                     </td>
@@ -2594,7 +2622,7 @@ data.forEach(store => {
                     <!-- Header -->
                     <div style="background: linear-gradient(135deg, #0f172a, #1e293b); padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; color: white;">
                         <h3 style="margin:0; font-size: 1.25rem; font-weight: 900; display: flex; align-items: center; gap: 10px; color: #f8fafc;">
-                            <span style="font-size: 1.4rem;">🔔</span> مركز إدارة التنبيهات والديون والإشعارات
+                            <span style="font-size: 1.4rem;">🔔</span> مركز إدارة التنبيهات ونواقص البضاعة والصلاحيات
                         </h3>
                         <button onclick="document.getElementById('notifyModal').remove()" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; font-weight: bold; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.12)'">&times;</button>
                     </div>
@@ -2602,7 +2630,7 @@ data.forEach(store => {
                     <!-- Custom Tabs (4 تبويبات مخصصة) -->
                     <div style="display: flex; background: #f8fafc; border-bottom: 1.5px solid #e2e8f0; overflow-x: auto;">
                         <div onclick="showNotificationsModal('products')" style="flex: 1; min-width: 130px; padding: 14px 8px; text-align: center; cursor: pointer; font-weight: 900; font-size: 0.92rem; transition: 0.25s; border-bottom: 3px solid ${activeTab === 'products' ? '#10b981' : 'transparent'}; color: ${activeTab === 'products' ? '#047857' : '#64748b'}; background: ${activeTab === 'products' ? 'rgba(16, 185, 129, 0.08)' : 'transparent'};">
-                            📦 نواقص البضاعة <span style="background:${activeLowStock.length > 0 ? '#ef4444' : '#e2e8f0'}; color:${activeLowStock.length > 0 ? '#fff' : '#64748b'}; font-size:0.75rem; padding:2px 7px; border-radius:12px; margin-right:4px;">${activeLowStock.length}</span>
+                            📦 البضاعة والصلاحية <span style="background:${activeProductsTotal > 0 ? '#ef4444' : '#e2e8f0'}; color:${activeProductsTotal > 0 ? '#fff' : '#64748b'}; font-size:0.75rem; padding:2px 7px; border-radius:12px; margin-right:4px;">${activeProductsTotal}</span>
                         </div>
                         <div onclick="showNotificationsModal('accounts')" style="flex: 1; min-width: 130px; padding: 14px 8px; text-align: center; cursor: pointer; font-weight: 900; font-size: 0.92rem; transition: 0.25s; border-bottom: 3px solid ${activeTab === 'accounts' ? '#3b82f6' : 'transparent'}; color: ${activeTab === 'accounts' ? '#1d4ed8' : '#64748b'}; background: ${activeTab === 'accounts' ? 'rgba(59, 130, 246, 0.08)' : 'transparent'};">
                             💳 تنبيهات الحسابات <span style="background:${activeAccountsTotal > 0 ? '#ef4444' : '#e2e8f0'}; color:${activeAccountsTotal > 0 ? '#fff' : '#64748b'}; font-size:0.75rem; padding:2px 7px; border-radius:12px; margin-right:4px;">${activeAccountsTotal}</span>
@@ -2618,27 +2646,28 @@ data.forEach(store => {
                     <!-- Content Area -->
                     <div style="padding: 20px 24px; flex: 1; overflow-y: auto; background: #fff; min-height: 280px;">
                         ${activeTab === 'products' ? `
-                            ${(activeLowStock.length === 0) ? `
+                            ${(activeProductsTotal === 0) ? `
                                 <div style="text-align: center; padding: 45px 20px; color: #64748b;">
                                     <div style="font-size: 3.2rem; margin-bottom: 12px;">🎉</div>
-                                    <div style="font-weight: 900; font-size: 1.15rem; color: #0f172a;">مخزون البضاعة مكتمل ومستقر!</div>
-                                    <div style="font-size: 0.88rem; margin-top: 5px; color: #64748b;">لا توجد أصناف وصلت للحد الأدنى للنواقص أو بحاجة لطلب حالياً.</div>
+                                    <div style="font-weight: 900; font-size: 1.15rem; color: #0f172a;">مخزون البضاعة والصلاحيات مكتمل ومستقر!</div>
+                                    <div style="font-size: 0.88rem; margin-top: 5px; color: #64748b;">لا توجد أصناف وصلت للحد الأدنى للنواقص أو أوشكت صلاحيتها على الانتهاء.</div>
                                 </div>
                             ` : `
                                 <div style="margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center;">
-                                    <span style="font-size:0.85rem; font-weight:800; color:#475569;">الأصناف التي قاربت على النفاد (اضغط "استلام" لتأكيد المراجعة ونقلها للأرشيف):</span>
-                                    <button onclick="acknowledgeAllProductsNotifications()" style="padding: 6px 14px; background: #10b981; color: white; border: none; border-radius: 8px; font-weight: 900; font-size: 0.8rem; cursor: pointer;">✔️ استلام جميع نواقص البضاعة</button>
+                                    <span style="font-size:0.85rem; font-weight:800; color:#475569;">الأصناف التي قاربت على النفاد أو قريبة الانتهاء:</span>
+                                    <button onclick="acknowledgeAllProductsNotifications()" style="padding: 6px 14px; background: #10b981; color: white; border: none; border-radius: 8px; font-weight: 900; font-size: 0.8rem; cursor: pointer;">✔️ استلام جميع تنبيهات البضاعة</button>
                                 </div>
                                 <table class="report-table" style="width:100%; border-collapse:collapse; color: #1e293b;">
                                     <thead>
                                         <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
                                             <th style="text-align:right; padding:10px 12px; color: #475569; font-weight: 900;">اسم الصنف</th>
-                                            <th style="padding:10px 12px; color: #475569; font-weight: 900; text-align:center;">الكمية الحالية</th>
+                                            <th style="padding:10px 12px; color: #475569; font-weight: 900; text-align:center;">الحالة / الرصيد</th>
                                             <th style="padding:10px 12px; color: #475569; font-weight: 900; text-align:center;">تأكيد الاستلام</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         ${createRows(activeLowStock, 'low-stock', false)}
+                                        ${createRows(activeExpiring, 'expiry', false)}
                                     </tbody>
                                 </table>
                             `}
@@ -2686,6 +2715,7 @@ data.forEach(store => {
                                     </thead>
                                     <tbody>
                                         ${createRows(archivedLowStock, 'low-stock', true)}
+                                        ${createRows(archivedExpiring, 'expiry', true)}
                                         ${createRows(archivedDebt, 'debt', true)}
                                         ${createRows(archivedDelayed, 'delayed', true)}
                                     </tbody>
@@ -2695,21 +2725,31 @@ data.forEach(store => {
                             <!-- محتوى تبويب الإشعارات السحابية (عرض كافة الإشعارات والرسائل السحابية التاريخية) -->
                             <div style="padding: 10px 0; display:flex; flex-direction:column; gap:16px;">
                                 ${(window.cloudAnnouncementsHistory && window.cloudAnnouncementsHistory.length > 0) ? `
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-size:0.85rem; font-weight:800; color:#64748b;">سجل الرسائل والتحديثات السحابية الواردة (${window.cloudAnnouncementsHistory.length}):</span>
-                                        <button onclick="if (typeof window.checkCloudAnnouncements === 'function') { window.checkCloudAnnouncements(); setTimeout(() => showNotificationsModal('cloud'), 800); }" style="padding: 6px 14px; background: #8b5cf6; color: white; border: none; border-radius: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer;">🔄 تحديث وفحص الرسائل</button>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
+                                        <span style="font-size:0.85rem; font-weight:800; color:#475569;">سجل الرسائل والتحديثات السحابية الواردة (${window.cloudAnnouncementsHistory.length}):</span>
+                                        <button onclick="if (typeof window.checkCloudAnnouncements === 'function') { window.checkCloudAnnouncements(); setTimeout(() => showNotificationsModal('cloud'), 800); }" style="padding: 6px 14px; background: #8b5cf6; color: white; border: none; border-radius: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer; box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);">🔄 تحديث وفحص الرسائل الآن</button>
                                     </div>
-                                    ${window.cloudAnnouncementsHistory.map((item, idx) => `
-                                        <div style="background: linear-gradient(135deg, #1e113a, #0f172a); border: 2px solid ${item.active ? 'rgba(212, 175, 55, 0.6)' : 'rgba(255, 255, 255, 0.15)'}; border-radius: 20px; padding: 22px 25px; color: white; box-shadow: 0 10px 25px rgba(0,0,0,0.2); position:relative;">
-                                            ${item.active ? '<span style="position:absolute; top:18px; left:20px; background:#10b981; color:#fff; font-size:0.75rem; font-weight:900; padding:3px 10px; border-radius:20px;">نشط حالياً ⚡</span>' : '<span style="position:absolute; top:18px; left:20px; background:rgba(255,255,255,0.15); color:#cbd5e1; font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:20px;">أرشيف سابق 📁</span>'}
+                                    ${window.cloudAnnouncementsHistory.map((item, idx) => {
+                                        const annNumber = item.id ? item.id : (idx + 1);
+                                        const dateFormatted = item.receivedAt ? new Date(item.receivedAt).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                                        return `
+                                        <div style="background: linear-gradient(135deg, #1e113a, #0f172a); border: 2px solid ${item.active ? 'rgba(212, 175, 55, 0.7)' : 'rgba(255, 255, 255, 0.15)'}; border-radius: 20px; padding: 22px 25px; color: white; box-shadow: 0 10px 25px rgba(0,0,0,0.25); position:relative;">
+                                            <div style="position:absolute; top:18px; left:20px; display:flex; gap:8px; align-items:center;">
+                                                <span style="background: rgba(255,255,255,0.15); color: #fde047; font-size: 0.75rem; font-weight: 900; padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(253, 224, 71, 0.4);">
+                                                    #${annNumber}
+                                                </span>
+                                                ${item.active ? '<span style="background:#10b981; color:#fff; font-size:0.75rem; font-weight:900; padding:3px 10px; border-radius:20px; box-shadow: 0 2px 6px rgba(16,185,129,0.3);">نشط حالياً ⚡</span>' : '<span style="background:rgba(255,255,255,0.12); color:#cbd5e1; font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:20px;">أرشيف سابق 📁</span>'}
+                                            </div>
                                             
                                             <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
                                                 <div style="width: 46px; height: 46px; background: linear-gradient(135deg, #d4af37, #b45309); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 12px rgba(212, 175, 55, 0.35);">
                                                     ${item.icon || '📢'}
                                                 </div>
                                                 <div>
-                                                    <h4 style="margin: 0; font-size: 1.18rem; font-weight: 900; color: #fde047;">${item.title || 'إشعار من الإدارة'}</h4>
-                                                    <p style="margin: 3px 0 0; font-size: 0.78rem; color: #94a3b8; font-weight: bold;">تحديث سحابي مباشر ${item.id ? `• كود: ${item.id}` : ''}</p>
+                                                    <h4 style="margin: 0; font-size: 1.18rem; font-weight: 900; color: #fde047;">${item.title || 'إشعار سحابي'}</h4>
+                                                    <p style="margin: 3px 0 0; font-size: 0.78rem; color: #94a3b8; font-weight: bold;">
+                                                        رسالة مباشرة من فريق التطوير ${dateFormatted ? `• 📅 ${dateFormatted}` : ''}
+                                                    </p>
                                                 </div>
                                             </div>
 
@@ -2719,13 +2759,13 @@ data.forEach(store => {
 
                                             ${item.link ? `
                                                 <div style="text-align:left;">
-                                                    <button onclick="window.open('${item.link}', '_blank')" style="padding: 8px 18px; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 10px; font-weight: 900; font-size:0.85rem; cursor: pointer;">
+                                                    <button onclick="window.open('${item.link}', '_blank')" style="padding: 8px 18px; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 10px; font-weight: 900; font-size:0.85rem; cursor: pointer; box-shadow: 0 3px 8px rgba(16,185,129,0.3);">
                                                         ${item.linkText || 'معرفة التفاصيل 🔗'}
                                                     </button>
                                                 </div>
                                             ` : ''}
-                                        </div>
-                                    `).join('')}
+                                        </div>`;
+                                    }).join('')}
                                 ` : `
                                     <div style="text-align: center; padding: 45px 20px; color: #64748b;">
                                         <div style="font-size: 3.2rem; margin-bottom: 12px;">☁️</div>
@@ -2741,9 +2781,9 @@ data.forEach(store => {
                     <!-- Footer -->
                     <div style="padding: 14px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            ${(activeTab === 'products' && activeLowStock.length > 0) ? `
+                            ${(activeTab === 'products' && activeProductsTotal > 0) ? `
                                 <button onclick="acknowledgeAllProductsNotifications()" style="padding: 9px 18px; background: #10b981; color: white; border: none; border-radius: 9px; font-weight: 900; cursor: pointer; font-size:0.85rem;">
-                                    <span>✔️</span> استلام جميع نواقص البضاعة
+                                    <span>✔️</span> استلام جميع تنبيهات البضاعة والصلاحيات
                                 </button>
                             ` : (activeTab === 'accounts' && activeAccountsTotal > 0) ? `
                                 <button onclick="acknowledgeAllAccountsNotifications()" style="padding: 9px 18px; background: #3b82f6; color: white; border: none; border-radius: 9px; font-weight: 900; cursor: pointer; font-size:0.85rem;">
@@ -2985,22 +3025,36 @@ data.forEach(store => {
                 const items = transactions.filter(t => t.invoiceId == invoiceId);
                 if (items.length === 0) return alert("لا تتوفر بيانات لهذه الفاتورة.");
                 const head = items[0];
+                let partnerName = head.partner || head.customer || '';
+                let prevBal = 0;
+                if (partnerName && !window.isGenericCashPartner(partnerName)) {
+                    if (typeof getHistoricalPartnerBalance === 'function') {
+                        prevBal = getHistoricalPartnerBalance(partnerName, head.invoiceId || head.id);
+                    } else if (typeof getAccountBalance === 'function') {
+                        prevBal = getAccountBalance(partnerName, head.invoiceId || head.id);
+                    }
+                }
+                const totalAmt = parseFloat(head.total || 0);
+                const paidAmt = parseFloat(head.paidAmount || head.paid || 0);
+                const deferredAmt = parseFloat(head.deferred !== undefined ? head.deferred : (totalAmt - paidAmt));
                 printInvoice({
                     invoiceNumber: head.invoiceId || head.id,
                     invoiceType: head.type || 'بيع',
                     date: head.dateISO || head.date || '',
                     time: head.timeISO || '',
                     cashier: head.user || head.cashier || '',
-                    customer: head.partner || head.customer || 'عميل نقدي',
+                    customer: partnerName || 'عميل نقدي',
                     items: items.map(it => ({
                         name: it.product || it.name,
                         qty: parseFloat(it.qty || 1),
                         price: parseFloat(it.price || 0),
                         unit: it.unit || 'قطعة'
                     })),
-                    totalAmount: parseFloat(head.total || 0),
-                    paid: parseFloat(head.paidAmount || head.paid || 0),
-                    deferred: parseFloat(head.deferred || 0),
+                    totalAmount: totalAmt,
+                    paid: paidAmt,
+                    deferred: deferredAmt,
+                    prevBalance: prevBal,
+                    currentBalance: prevBal + deferredAmt,
                     docType: (head.type && head.type.includes('شراء')) ? 'purchase' : 'sales'
                 });
             }
@@ -3121,6 +3175,11 @@ data.forEach(store => {
                 });
             }
 
+            const hasVariants = !isFinancial && (
+                items.some(i => (i.size || i.selectedSize || i.color || i.selectedColor)) ||
+                (typeof document !== 'undefined' && document.body.classList.contains('bayan-variants-enabled'))
+            );
+
             let itemsHtml = '';
             let grandTotal = 0;
             
@@ -3132,6 +3191,11 @@ data.forEach(store => {
                 let total = parseFloat(item.total != null ? item.total : (price * qty));
                 grandTotal += total;
                 
+                let itemSize = item.size || item.selectedSize || '';
+                let itemColor = item.color || item.selectedColor || '';
+                let sizeBadge = itemSize ? `<span style="background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; padding:2px 8px; border-radius:6px; font-weight:900; font-size:0.82rem;">${itemSize}</span>` : `<span style="color:#cbd5e1;">-</span>`;
+                let colorBadge = itemColor ? `<span style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:2px 8px; border-radius:6px; font-weight:900; font-size:0.82rem;">${itemColor}</span>` : `<span style="color:#cbd5e1;">-</span>`;
+
                 let method = tx.method || tx.paymentMethod || 'نقدي';
                 let cashier = tx.user || tx.cashier || '-';
                 
@@ -3139,11 +3203,15 @@ data.forEach(store => {
                     <tr style="border-bottom:1px solid #f1f5f9;">
                         <td style="padding:12px; text-align:right; font-weight:bold; color:#334155;">${name}</td>
                         ${!isFinancial ? `
-                        <td style="padding:12px; text-align:center; color:#475569; font-weight:bold;">${qty} ${unit}</td>
-                        <td style="padding:12px; text-align:center; color:#475569;">${price.toFixed(2)} ج.م</td>
+                            ${hasVariants ? `
+                                <td style="padding:12px; text-align:center;">${sizeBadge}</td>
+                                <td style="padding:12px; text-align:center;">${colorBadge}</td>
+                            ` : ''}
+                            <td style="padding:12px; text-align:center; color:#475569; font-weight:bold;">${qty} ${unit}</td>
+                            <td style="padding:12px; text-align:center; color:#475569;">${price.toFixed(2)} ج.م</td>
                         ` : `
-                        <td style="padding:12px; text-align:center; color:#475569;">${method}</td>
-                        <td style="padding:12px; text-align:center; color:#475569;">${cashier}</td>
+                            <td style="padding:12px; text-align:center; color:#475569;">${method}</td>
+                            <td style="padding:12px; text-align:center; color:#475569;">${cashier}</td>
                         `}
                         <td style="padding:12px; text-align:center; font-weight:bold; color:#1e293b;">${total.toFixed(2)} ج.م</td>
                     </tr>
@@ -3201,7 +3269,7 @@ data.forEach(store => {
             }
             
             let modalContent = `
-                <div style="background: white; width: 680px; max-width: 95%; max-height: 90vh; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(255,255,255,0.4);">
+                <div style="background: white; width: ${hasVariants ? '760px' : '680px'}; max-width: 95%; max-height: 90vh; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(255,255,255,0.4);">
                     <div style="background: linear-gradient(135deg, ${typeColor}, #2c3e50); padding: 20px 25px; color: white; display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <h3 style="margin: 0; font-size: 1.3rem; font-weight: 900;">${typeName} #${tx.invoiceId || tx.invoiceNumber || tx.id}</h3>
@@ -3232,36 +3300,57 @@ data.forEach(store => {
                                     <tr>
                                         <th style="padding:12px; text-align:right; font-size:0.8rem; color:#475569; font-weight:900;">${isFinancial ? 'البيان' : 'الصنف'}</th>
                                         ${!isFinancial ? `
-                                        <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:110px; font-weight:900;">الكمية</th>
-                                        <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:120px; font-weight:900;">السعر</th>
+                                            ${hasVariants ? `
+                                                <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:80px; font-weight:900;">المقاس</th>
+                                                <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:80px; font-weight:900;">اللون</th>
+                                            ` : ''}
+                                            <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:100px; font-weight:900;">الكمية</th>
+                                            <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:110px; font-weight:900;">السعر</th>
                                         ` : `
-                                        <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:150px; font-weight:900;">طريقة الدفع</th>
-                                        <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:150px; font-weight:900;">بواسطة</th>
+                                            <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:150px; font-weight:900;">طريقة الدفع</th>
+                                            <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:150px; font-weight:900;">بواسطة</th>
                                         `}
-                                        <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:140px; font-weight:900;">${isFinancial ? 'المبلغ' : 'الإجمالي'}</th>
+                                        <th style="padding:12px; text-align:center; font-size:0.8rem; color:#475569; width:130px; font-weight:900;">${isFinancial ? 'المبلغ' : 'الإجمالي'}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${itemsHtml || '<tr><td colspan="4" style="text-align:center; padding:20px; color:#94a3b8;">لا توجد أصناف</td></tr>'}
+                                    ${itemsHtml || '<tr><td colspan="' + (hasVariants ? '6' : '4') + '" style="text-align:center; padding:20px; color:#94a3b8;">لا توجد أصناف</td></tr>'}
                                 </tbody>
                             </table>
                         </div>
                         
-                        <div style="display: flex; justify-content: flex-end; gap: 30px; padding: 10px 5px; border-top: 1px solid #f1f5f9;">
-                            <div>
-                                <span style="font-size:0.8rem; color:#64748b; font-weight:bold;">${isFinancial ? 'إجمالي المبلغ:' : 'إجمالي قيمة الفاتورة:'}</span>
-                                <div style="font-size:1.35rem; font-weight:900; color:#1e293b;">${grandTotal.toFixed(2)} ج.م</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; padding: 12px 10px; border-top: 1px solid #f1f5f9; background: #fafafa; border-radius: 12px;">
+                            ${(() => {
+                                let pName = tx.customer || tx.partner || tx.account || tx.supplier || '';
+                                if (pName && !window.isGenericCashPartner(pName) && typeof getAccountBalance === 'function') {
+                                    const curBal = getAccountBalance(pName);
+                                    const balColor = curBal > 0.01 ? '#e74c3c' : (curBal < -0.01 ? '#27ae60' : '#475569');
+                                    const balLabel = curBal > 0.01 ? `مديونية عليه (${curBal.toFixed(2)} ج.م)` : (curBal < -0.01 ? `رصيد له (${Math.abs(curBal).toFixed(2)} ج.م)` : 'خالص (0.00 ج.م)');
+                                    return `
+                                        <div style="background: #ffffff; border: 1.5px dashed ${balColor}; padding: 6px 14px; border-radius: 12px; display: flex; flex-direction: column; justify-content: center;">
+                                            <span style="font-size:0.78rem; color:#64748b; font-weight:bold;">👤 رصيد الحساب الإجمالي المتبقي:</span>
+                                            <div style="font-size:1.1rem; font-weight:900; color:${balColor};">${balLabel}</div>
+                                        </div>
+                                    `;
+                                }
+                                return '<div></div>';
+                            })()}
+                            <div style="display: flex; justify-content: flex-end; gap: 20px; align-items: center;">
+                                <div>
+                                    <span style="font-size:0.8rem; color:#64748b; font-weight:bold;">${isFinancial ? 'إجمالي المبلغ:' : 'إجمالي الفاتورة:'}</span>
+                                    <div style="font-size:1.3rem; font-weight:900; color:#1e293b;">${grandTotal.toFixed(2)} ج.م</div>
+                                </div>
+                                ${!isTransfer && !isAdjustment && !isFinancial ? `
+                                    <div>
+                                        <span style="font-size:0.8rem; color:#64748b; font-weight:bold;">المدفوع:</span>
+                                        <div style="font-size:1.3rem; font-weight:900; color:#27ae60;">${paidVal.toFixed(2)} ج.م</div>
+                                    </div>
+                                    <div>
+                                        <span style="font-size:0.8rem; color:#64748b; font-weight:bold;">المتبقي من الفاتورة:</span>
+                                        <div style="font-size:1.3rem; font-weight:900; color:#e74c3c;">${remainingVal.toFixed(2)} ج.م</div>
+                                    </div>
+                                ` : ''}
                             </div>
-                            ${!isTransfer && !isAdjustment && !isFinancial ? `
-                                <div>
-                                    <span style="font-size:0.8rem; color:#64748b; font-weight:bold;">المدفوع:</span>
-                                    <div style="font-size:1.35rem; font-weight:900; color:#27ae60;">${paidVal.toFixed(2)} ج.م</div>
-                                </div>
-                                <div>
-                                    <span style="font-size:0.8rem; color:#64748b; font-weight:bold;">المتبقي:</span>
-                                    <div style="font-size:1.35rem; font-weight:900; color:#e74c3c;">${remainingVal.toFixed(2)} ج.م</div>
-                                </div>
-                            ` : ''}
                         </div>
                     </div>
                     
@@ -3682,9 +3771,19 @@ data.forEach(store => {
                             }
                         }
 
+                        let prevBal = 0;
+                        let partnerName = tx.customer || tx.partner || '';
+                        if (partnerName && !window.isGenericCashPartner(partnerName)) {
+                            if (typeof getHistoricalPartnerBalance === 'function') {
+                                prevBal = getHistoricalPartnerBalance(partnerName, tx.invoiceId || tx.invoiceNumber || tx.id);
+                            } else if (typeof getAccountBalance === 'function') {
+                                prevBal = getAccountBalance(partnerName, tx.invoiceId || tx.invoiceNumber || tx.id);
+                            }
+                        }
+
                         printInvoice({
                             invoiceNumber: tx.invoiceId || tx.invoiceNumber || tx.id,
-                            invoiceType: printType,
+                            invoiceType: tx.method || printType,
                             date: printDate,
                             time: printTime,
                             cashier: tx.cashier || tx.user || '',
@@ -3692,7 +3791,9 @@ data.forEach(store => {
                             items: items,
                             totalAmount: grandTotal,
                             paid: paidVal,
-                            deferred: remainingVal,
+                            deferred: grandTotal - paidVal,
+                            prevBalance: prevBal,
+                            currentBalance: prevBal + (grandTotal - paidVal),
                             docType: printDocType
                         });
                     } else {
@@ -3925,67 +4026,15 @@ data.forEach(store => {
 
         function printIndividualTransaction(idx) {
             const t = transactions[idx];
-            if (t.type.includes('بيع') || t.type.includes('شراء')) {
-                // إذا كانت فاتورة (تحتوي على رقم فاتورة)، نجمع كل بنودها
-                if (t.invoiceId) {
-                    const sameInvoiceItems = transactions.filter(x => x.invoiceId === t.invoiceId && x.type === t.type);
-
-                    // تحويل البيانات لشكل "Cart"
-                    const tempCart = sameInvoiceItems.map(item => ({
-                        id: productsDB.find(p => p.name === item.product)?.id || 0,
-                        name: item.product,
-                        qty: parseFloat(item.qty),
-                        price: parseFloat(item.price)
-                    }));
-
-                    const total = sameInvoiceItems.reduce((acc, item) => acc + parseFloat(item.total), 0);
-
-                    // استحضار بيانات المحل والإعدادات
-                    const shopName = document.getElementById('shopName').value || 'متجر السعادة';
-                    const shopAddress = document.getElementById('shopAddress').value || '';
-                    const shopPhone = document.getElementById('shopPhone1').value || '';
-                    const footerMsg = document.getElementById('printFooterMsg').value || 'شكراً لزيارتكم!';
-
-                    const receiptDiv = document.getElementById('receipt-area');
-
-                    let itemsHtml = tempCart.map((item) => `
-                        <tr>
-                            <td style="text-align:right;">${item.name}</td>
-                            <td>${item.qty}</td>
-                            <td>${(parseFloat(item.price) || 0).toFixed(2)}</td>
-                            <td style="font-weight:bold;">${((parseFloat(item.price) || 0) * (parseFloat(item.qty) || 0)).toFixed(2)}</td>
-                        </tr>
-                    `).join('');
-
-                    receiptDiv.innerHTML = `
-                        <div class="print-container">
-                            <div class="print-header-top">
-                                <div class="print-shop-name">${shopName}</div>
-                                <div class="print-title-box">${t.type}</div>
-                            </div>
-                            <table class="print-info-table">
-                                <tr><td><b>رقم:</b> #${t.invoiceId}</td><td style="text-align:left;"><b>التاريخ:</b> ${t.date}</td></tr>
-                                <tr><td><b>العميل/المورد:</b> ${t.partner}</td><td style="text-align:left;"><b>المستخدم:</b> ${t.user}</td></tr>
-                            </table>
-                            <table class="print-items-table">
-                                <thead><tr><th style="text-align:right;">الصنف</th><th>ك</th><th>سعر</th><th>إجمالي</th></tr></thead>
-                                <tbody>${itemsHtml}</tbody>
-                            </table>
-                            <div class="print-total-section">
-                                <div class="total-row grand-total"><span>الصافي النهائي:</span> <span>${total.toFixed(2)} ج.م</span></div>
-                            </div>
-                            <div class="print-footer-area">
-                                ${shopAddress ? `<div>📍 ${shopAddress}</div>` : ''}
-                                ${shopPhone ? `<div>📞 ${shopPhone}</div>` : ''}
-                                <div style="font-weight:bold; margin-top:10px;">${footerMsg}</div>
-                            </div>
-                        </div>
-                    `;
-                    window.print();
+            if (!t) return;
+            if (t.type.includes('بيع') || t.type.includes('شراء') || t.type.includes('مرتجع')) {
+                if (t.invoiceId && typeof viewInvoiceItems === 'function') {
+                    viewInvoiceItems(t.invoiceId, t.type, true);
+                } else if (t.invoiceId && typeof printBillFromData === 'function') {
+                    printBillFromData(t.invoiceId, t.type);
                 } else {
                     alert("لا يمكن طباعة هذا البند بشكل مستقل (لا يوجد رقم فاتورة)");
                 }
-                // طباعة فاتورة مبيعات مخزنة مسبقاً (مبسط)
             } else if (t.type.includes('قبض')) {
                 document.getElementById('receiptID').value = t.invoiceId || '-';
                 document.getElementById('receiptDate').value = t.dateISO;
@@ -4177,7 +4226,21 @@ data.forEach(store => {
                     if (wpBar) wpBar.classList.add('hidden');
                     if (infoWidget) infoWidget.classList.add('hidden');
 
-                    switchSection('dashboard'); // تهيئة النظام بعد الدخول
+                    const settingsObj = JSON.parse(getStore('pos_settings') || '{}');
+                    const bType = settingsObj.businessType || 'clothing';
+                    const shouldGoSales = (settingsObj.directToSalesOnLogin !== undefined)
+                        ? !!settingsObj.directToSalesOnLogin
+                        : (bType === 'clothing');
+
+                    if (shouldGoSales && typeof switchSection === 'function') {
+                        switchSection('sales');
+                        setTimeout(() => {
+                            const searchEl = document.getElementById('itemSearch') || document.getElementById('salesSearch');
+                            if (searchEl) searchEl.focus();
+                        }, 250);
+                    } else if (typeof switchSection === 'function') {
+                        switchSection('dashboard');
+                    }
                     updateNotifications();
                 } else {
                     if (errorMsgEl) {
@@ -4266,7 +4329,21 @@ data.forEach(store => {
             if (wpBar) wpBar.classList.add('hidden');
             if (infoWidget) infoWidget.classList.add('hidden');
 
-            if (typeof switchSection === 'function') switchSection('dashboard');
+            const settingsObjNfc = JSON.parse(getStore('pos_settings') || '{}');
+            const bTypeNfc = settingsObjNfc.businessType || 'clothing';
+            const shouldGoSalesNfc = (settingsObjNfc.directToSalesOnLogin !== undefined)
+                ? !!settingsObjNfc.directToSalesOnLogin
+                : (bTypeNfc === 'clothing');
+
+            if (shouldGoSalesNfc && typeof switchSection === 'function') {
+                switchSection('sales');
+                setTimeout(() => {
+                    const searchEl = document.getElementById('itemSearch') || document.getElementById('salesSearch');
+                    if (searchEl) searchEl.focus();
+                }, 250);
+            } else if (typeof switchSection === 'function') {
+                switchSection('dashboard');
+            }
             if (typeof updateNotifications === 'function') updateNotifications();
 
             if (typeof showToast === 'function') showToast(`💳 أهلاً بك: ${currentUser.name} (تم الدخول بكارت NFC ✨)`, 'success');
@@ -4497,6 +4574,12 @@ data.forEach(store => {
                 } else {
                     window.print();
                 }
+            } else if (event.key === 'F6') {
+                event.preventDefault();
+                if (typeof switchSection === 'function') switchSection('settings');
+                setTimeout(() => {
+                    if (typeof openSettingsTab === 'function') openSettingsTab('business-profile');
+                }, 100);
             } else if (event.key === 'F7') {
                 event.preventDefault();
                 if (typeof toggleCalculator === 'function') toggleCalculator();
@@ -4842,6 +4925,27 @@ data.forEach(store => {
         if (e.key === 'Escape') toggleCalculator();
     });
 
+        window.selectSetupBusinessType = function(type) {
+            const types = ['clothing', 'supermarket', 'general'];
+            types.forEach(t => {
+                const card = document.getElementById(`setupBiz_${t}`);
+                const radio = card ? card.querySelector('input[type="radio"]') : null;
+                if (card) {
+                    if (t === type) {
+                        card.style.background = 'rgba(16, 185, 129, 0.18)';
+                        card.style.border = '2px solid #10b981';
+                        card.style.boxShadow = '0 0 12px rgba(16, 185, 129, 0.3)';
+                        if (radio) radio.checked = true;
+                    } else {
+                        card.style.background = 'rgba(255, 255, 255, 0.05)';
+                        card.style.border = '1.5px solid rgba(255, 255, 255, 0.2)';
+                        card.style.boxShadow = 'none';
+                        if (radio) radio.checked = false;
+                    }
+                }
+            });
+        };
+
         window.executeFirstTimeSetup = async function() {
             const name = document.getElementById('setupAdminName').value.trim();
             const pin = document.getElementById('setupAdminPin').value.trim();
@@ -4852,7 +4956,53 @@ data.forEach(store => {
             if (pin.length < 4) return alert("❌ يجب أن يتكون رمز المرور من 4 أرقام على الأقل!");
             if (pin !== pinConfirm) return alert("❌ رمز المرور غير متطابق!");
 
+            // استخراج نوع النشاط التجاري المختار
+            const selectedBizRadio = document.querySelector('input[name="setupBusinessType"]:checked');
+            const selectedBizType = selectedBizRadio ? selectedBizRadio.value : 'clothing';
+
             try {
+                // حفظ نوع النشاط في إعدادات النظام pos_settings وتكييف الأقسام
+                let posSettings = {};
+                try {
+                    posSettings = JSON.parse(getStore('pos_settings') || '{}');
+                } catch(e) {}
+
+                posSettings.businessType = selectedBizType;
+                posSettings.enableVariantsMatrix = (selectedBizType === 'clothing');
+
+                const allKnownSections = [
+                    'sales', 'sales-return', 'receipt', 'disbursement', 'daily-report',
+                    'invoices', 'accounts', 'inventory', 'product-inquiry', 'treasury',
+                    'statement', 'calculator', 'analysis', 'new-account', 'new-item',
+                    'price-tracking', 'ai-assistant', 'shortcuts', 'adjustment',
+                    'history', 'price-mgmt', 'transfer', 'warehouse-report', 'purchase', 'purchase-return'
+                ];
+                const activeClothingSections = ['sales', 'sales-return', 'receipt', 'disbursement', 'daily-report', 'invoices', 'accounts', 'inventory', 'statement'];
+
+                posSettings.visibleDashboardSections = {};
+                if (selectedBizType === 'clothing') {
+                    allKnownSections.forEach(s => {
+                        posSettings.visibleDashboardSections[s] = activeClothingSections.includes(s);
+                    });
+                } else {
+                    allKnownSections.forEach(s => {
+                        posSettings.visibleDashboardSections[s] = true;
+                    });
+                }
+
+                setStore('pos_settings', JSON.stringify(posSettings));
+
+                // مزامنة واجهة الإعدادات
+                const businessTypeSelect = document.getElementById('settingBusinessType');
+                if (businessTypeSelect) businessTypeSelect.value = selectedBizType;
+                const enableVariantsChk = document.getElementById('enableVariantsMatrix');
+                if (enableVariantsChk) enableVariantsChk.checked = (selectedBizType === 'clothing');
+
+                // تطبيق الواجهة فوراً وتحديث كارت الهوية
+                if (typeof applyBusinessTypeUI === 'function') {
+                    applyBusinessTypeUI();
+                }
+
                 // إضافة المستخدم الأول كأدمن
                 const newUser = { id: 1, name: name, pin: pin, role: 'admin' };
                 await db.users.add(newUser);
@@ -4864,8 +5014,16 @@ data.forEach(store => {
                 setStore('pos_session_user', JSON.stringify({ pin: newUser.pin, warehouseName: 'المخزن الرئيسي' }));
 
                 // تعبئة بيانات كارت النجاح
+                const bizNames = {
+                    clothing: 'ملابس وأحذية وشنط 👕',
+                    supermarket: 'سوبر ماركت ومواد غذائية 🛒',
+                    general: 'تجارة عامة وجملة وتوزيع 📦'
+                };
                 document.getElementById('displayAdminName').innerText = name;
                 document.getElementById('displayAdminPin').innerText = pin;
+                const displayBizEl = document.getElementById('displayAdminBusinessType');
+                if (displayBizEl) displayBizEl.innerText = bizNames[selectedBizType] || selectedBizType;
+
                 document.getElementById('currentUserDisplay').innerHTML = `<span style="opacity: 0.8;">👤</span><span>${currentUser.name} (مدير)</span>`;
                 document.getElementById('currentWarehouseName').innerText = `📦 المخزن الرئيسي`;
 
@@ -4874,7 +5032,7 @@ data.forEach(store => {
                 if (successModal) {
                     successModal.classList.remove('hidden');
                 } else {
-                    alert("🎉 تم إنشاء حساب المالك وتفعيل نظام بَيَان بنجاح!\nالاسم: " + name + "\nرمز المرور: " + pin);
+                    alert("🎉 تم إنشاء حساب المالك وتفعيل نظام بَيَان بنجاح!\nالاسم: " + name + "\nرمز المرور: " + pin + "\nنوع النشاط: " + (bizNames[selectedBizType] || selectedBizType));
                     closeSetupSuccessAndEnter();
                 }
             } catch (e) {

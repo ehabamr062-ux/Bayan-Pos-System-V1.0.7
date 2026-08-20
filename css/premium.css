@@ -109,11 +109,10 @@ body.dark-mode table th {
     background: rgba(255,255,255,0.05) !important;
 }
 table tr {
-    transition: all 0.2s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 table tbody tr:hover {
     background: rgba(16, 185, 129, 0.05) !important;
-    transform: scale(1.002);
 }
 body.dark-mode table tbody tr:hover {
     background: rgba(99, 102, 241, 0.15) !important;

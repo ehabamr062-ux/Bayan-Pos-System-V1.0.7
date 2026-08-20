@@ -68,7 +68,7 @@
                 setTimeout(() => {
                     showCustomAlert({
                         titleText: '✅ نظامك محدث',
-                        msg: 'أنت تستخدم حالياً أحدث إصدار مستقر من بَيَان POS (v1.0.8).',
+                        msg: 'أنت تستخدم حالياً أحدث إصدار مستقر من بَيَان POS (v2.0.0).',
                         type: 'success'
                     });
                 }, 1000);
@@ -355,6 +355,10 @@
                 window.acknowledgedLowStock = raw ? JSON.parse(raw) : [];
             } catch(e) { window.acknowledgedLowStock = []; }
             try {
+                const raw = getStore('acknowledged_expiry') || localStorage.getItem('acknowledged_expiry');
+                window.acknowledgedExpiry = raw ? JSON.parse(raw) : [];
+            } catch(e) { window.acknowledgedExpiry = []; }
+            try {
                 const raw = getStore('acknowledged_debt') || localStorage.getItem('acknowledged_debt');
                 window.acknowledgedDebt = raw ? JSON.parse(raw) : [];
             } catch(e) { window.acknowledgedDebt = []; }
@@ -364,7 +368,19 @@
             } catch(e) { window.acknowledgedDelayed = []; }
 
             const today = new Date();
-            const lowStockItems = productsDB.filter(p => p.stock <= 5 && !window.acknowledgedLowStock.includes(p.id));
+            today.setHours(0, 0, 0, 0);
+
+            const lowStockItems = productsDB.filter(p => (parseFloat(p.stock) || 0) <= (parseFloat(p.minStock) || 5) && !window.acknowledgedLowStock.includes(p.id));
+
+            // الأصناف منتهية الصلاحية أو التي تنتهي خلال 30 يوماً
+            const expiringItems = productsDB.filter(p => {
+                if (!p.expiry) return false;
+                const exp = new Date(p.expiry);
+                if (isNaN(exp.getTime())) return false;
+                exp.setHours(0, 0, 0, 0);
+                const diffDays = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+                return diffDays <= 30 && !window.acknowledgedExpiry.includes(p.id);
+            });
 
             const debtAccounts = accounts.filter(a => {
                 const balance = (parseFloat(a.debit) || 0) - (parseFloat(a.credit) || 0);
@@ -390,7 +406,7 @@
                 return diffDays > 30; // متأخر أكتر من 30 يوم
             });
 
-            const totalAlerts = lowStockItems.length + debtAccounts.length + delayedClients.length;
+            const totalAlerts = lowStockItems.length + expiringItems.length + debtAccounts.length + delayedClients.length;
             const badge = document.getElementById('bellBadge');
             if (badge) {
                 if (totalAlerts > 0) {
@@ -408,6 +424,11 @@
                 const str = JSON.stringify(window.acknowledgedLowStock);
                 setStore('acknowledged_low_stock', str);
                 localStorage.setItem('acknowledged_low_stock', str);
+            } else if (type === 'expiry') {
+                if (!window.acknowledgedExpiry.includes(id)) window.acknowledgedExpiry.push(id);
+                const str = JSON.stringify(window.acknowledgedExpiry);
+                setStore('acknowledged_expiry', str);
+                localStorage.setItem('acknowledged_expiry', str);
             } else if (type === 'debt') {
                 if (!window.acknowledgedDebt.includes(id)) window.acknowledgedDebt.push(id);
                 const str = JSON.stringify(window.acknowledgedDebt);
@@ -432,6 +453,11 @@
                 const str = JSON.stringify(window.acknowledgedLowStock);
                 setStore('acknowledged_low_stock', str);
                 localStorage.setItem('acknowledged_low_stock', str);
+            } else if (type === 'expiry') {
+                window.acknowledgedExpiry = window.acknowledgedExpiry.filter(x => x !== id);
+                const str = JSON.stringify(window.acknowledgedExpiry);
+                setStore('acknowledged_expiry', str);
+                localStorage.setItem('acknowledged_expiry', str);
             } else if (type === 'debt') {
                 window.acknowledgedDebt = window.acknowledgedDebt.filter(x => x !== id);
                 const str = JSON.stringify(window.acknowledgedDebt);
@@ -458,11 +484,30 @@
             const str = JSON.stringify(window.acknowledgedLowStock);
             setStore('acknowledged_low_stock', str);
             localStorage.setItem('acknowledged_low_stock', str);
+
+            // استلام تنبيهات الصلاحية أيضاً
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const allExpiring = productsDB.filter(p => {
+                if (!p.expiry) return false;
+                const exp = new Date(p.expiry);
+                if (isNaN(exp.getTime())) return false;
+                exp.setHours(0, 0, 0, 0);
+                const diffDays = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+                return diffDays <= 30;
+            });
+            allExpiring.forEach(p => {
+                if (!window.acknowledgedExpiry.includes(p.id)) window.acknowledgedExpiry.push(p.id);
+            });
+            const expStr = JSON.stringify(window.acknowledgedExpiry);
+            setStore('acknowledged_expiry', expStr);
+            localStorage.setItem('acknowledged_expiry', expStr);
+
             updateNotifications();
             if (typeof showNotificationsModal === 'function') {
                 showNotificationsModal('products');
             }
-            showToast("✅ تم تأكيد استلام كافة نواقص البضاعة!", "success");
+            showToast("✅ تم تأكيد استلام كافة تنبيهات البضاعة والصلاحية!", "success");
         };
 
         window.acknowledgeAllAccountsNotifications = function() {
@@ -511,12 +556,15 @@
 
         window.resetAcknowledgedNotifications = function() {
             window.acknowledgedLowStock = [];
+            window.acknowledgedExpiry = [];
             window.acknowledgedDebt = [];
             window.acknowledgedDelayed = [];
             removeStore('acknowledged_low_stock');
+            removeStore('acknowledged_expiry');
             removeStore('acknowledged_debt');
             removeStore('acknowledged_delayed');
             localStorage.removeItem('acknowledged_low_stock');
+            localStorage.removeItem('acknowledged_expiry');
             localStorage.removeItem('acknowledged_debt');
             localStorage.removeItem('acknowledged_delayed');
             updateNotifications();
@@ -883,18 +931,77 @@
             }, 3000);
         }
 
+        // نافذة توجيه ذكية تظهر عند الضغط على أزرار التحكم بدون تحديد صنف
+        window.showInventorySelectionGuide = function(actionType = 'تعديل') {
+            if (document.getElementById('inv-selection-guide-modal')) return;
+
+            const overlay = document.createElement('div');
+            overlay.id = 'inv-selection-guide-modal';
+            overlay.style.cssText = `
+                position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75);
+                backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+                z-index: 9999999; display: flex; align-items: center; justify-content: center;
+                animation: updaterFadeIn 0.25s ease; direction: rtl; font-family: 'Cairo', 'Segoe UI', sans-serif;
+            `;
+
+            overlay.innerHTML = `
+                <div style="background: #ffffff; border: 2.5px solid #7c3aed; border-radius: 24px; padding: 28px 32px; width: 480px; max-width: 92vw; box-shadow: 0 20px 50px rgba(124, 58, 237, 0.28); text-align: center; color: #0f172a; position: relative;">
+                    <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #ede9fe, #ddd6fe); border: 2px solid #7c3aed; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 30px; margin: 0 auto 16px; box-shadow: 0 6px 16px rgba(124, 58, 237, 0.2);">
+                        💡
+                    </div>
+                    <h3 style="margin: 0 0 10px; font-size: 1.28rem; font-weight: 900; color: #1e1b4b;">
+                        يرجى تحديد صنف من الجدول أولاً
+                    </h3>
+                    <p style="margin: 0 0 20px; font-size: 0.92rem; color: #475569; line-height: 1.8; font-weight: 700;">
+                        لتتمكن من تنفيذ عملية <strong style="color: #7c3aed; background: #f5f3ff; padding: 2px 8px; border-radius: 6px; border: 1px solid #ddd6fe;">${actionType}</strong>، يجب أولاً اختيار الصنف المطلوب من جدول البضاعة.
+                    </p>
+                    
+                    <div style="background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 14px; padding: 14px 16px; margin-bottom: 22px; text-align: right; font-size: 0.88rem; color: #334155; font-weight: 800; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="color: #10b981; font-size: 1.1rem;">✔️</span>
+                            <span><strong>طريقة 1:</strong> اضغط كليك بالماوس على صف الصنف مباشرة في الجدول.</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="color: #3b82f6; font-size: 1.1rem;">☑️</span>
+                            <span><strong>طريقة 2:</strong> ضع علامة في المربع الصغير الموجود بجانب اسم الصنف.</span>
+                        </div>
+                    </div>
+
+                    <button onclick="document.getElementById('inv-selection-guide-modal').remove();" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: white; border: none; border-radius: 12px; font-weight: 900; font-size: 0.96rem; cursor: pointer; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35); transition: 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                        فهمت ذلك، حسناً ✅
+                    </button>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+        };
+
         // دالة التعديل من شريط الأدوات الذكي (مطورة لدعم التحديد المتعدد)
         function editSelectedInventoryItem() {
             if (!checkPermission('stock_edit')) return;
-            const checkedBoxes = document.querySelectorAll('.inv-row-check:checked');
-
-            if (checkedBoxes.length === 0) {
-                return alert("⚠️ يرجى تحديد صنف واحد على الأقل من الجدول أولاً باستخدام مربع التحديد!");
+            
+            // جمع المعرفات المحددة عبر كافة الطرق
+            let targetIds = [];
+            if (window.selectedInventoryIds && window.selectedInventoryIds.size > 0) {
+                targetIds = Array.from(window.selectedInventoryIds);
+            } else {
+                const checkedBoxes = document.querySelectorAll('.inv-row-check:checked');
+                checkedBoxes.forEach(cb => {
+                    const row = cb.closest('tr');
+                    if (row && row.getAttribute('data-id')) targetIds.push(parseInt(row.getAttribute('data-id')));
+                });
             }
 
-            if (checkedBoxes.length === 1) {
-                const targetId = parseInt(checkedBoxes[0].closest('tr').getAttribute('data-id'));
-                const p = productsDB.find(x => x.id === targetId);
+            if (targetIds.length === 0 && window.selectedInventoryId) {
+                targetIds.push(window.selectedInventoryId);
+            }
+
+            if (targetIds.length === 0) {
+                return showInventorySelectionGuide('تعديل بيانات الصنف');
+            }
+
+            if (targetIds.length === 1) {
+                const p = productsDB.find(x => x.id === targetIds[0]);
                 if (p) openNewItemModal(p);
             } else {
                 // إذا كان أكثر من صنف، نفتح تعديل الأسعار المجمع
@@ -905,16 +1012,25 @@
         // دالة الحذف من شريط الأدوات الذكي (مطورة للحذف الجماعي)
         async function deleteSelectedInventoryItem() {
             if (!checkPermission('stock_delete')) return;
-            const checkedBoxes = document.querySelectorAll('.inv-row-check:checked');
+            
             let targetIds = [];
-
-            if (checkedBoxes.length > 0) {
+            if (window.selectedInventoryIds && window.selectedInventoryIds.size > 0) {
+                targetIds = Array.from(window.selectedInventoryIds);
+            } else {
+                const checkedBoxes = document.querySelectorAll('.inv-row-check:checked');
                 checkedBoxes.forEach(cb => {
-                    targetIds.push(parseInt(cb.closest('tr').getAttribute('data-id')));
+                    const row = cb.closest('tr');
+                    if (row && row.getAttribute('data-id')) targetIds.push(parseInt(row.getAttribute('data-id')));
                 });
             }
 
-            if (targetIds.length === 0) return alert("⚠️ يرجى تحديد صنف أو أكثر أولاً باستخدام مربع التحديد!");
+            if (targetIds.length === 0 && window.selectedInventoryId) {
+                targetIds.push(window.selectedInventoryId);
+            }
+
+            if (targetIds.length === 0) {
+                return showInventorySelectionGuide('حذف الصنف');
+            }
 
             const msg = targetIds.length === 1 ? "🚨 هل أنت متأكد من حذف هذا الصنف ونقله للسلة؟" : `🚨 هل أنت متأكد من حذف عدد (${targetIds.length}) أصناف مختارة ونقلها للسلة؟`;
 
@@ -1157,8 +1273,13 @@
 
         function calculateUnitPrices() {
             const mainPrice = parseFloat(document.getElementById('newItemPrice').value) || 0;
-            const mainCost = parseFloat(document.getElementById('newItemCost').value) || 0;
+            const mainCostEl = document.getElementById('newItemCost');
+            const mainCost = parseFloat(mainCostEl ? mainCostEl.value : 0) || 0;
             const mainWholesale = parseFloat(document.getElementById('newItemWholesale').value) || 0;
+            const costQtyEl = document.getElementById('newItemCostQty');
+            if (costQtyEl && mainCostEl && document.activeElement === mainCostEl) {
+                costQtyEl.value = mainCostEl.value;
+            }
             const rows = document.getElementById('productUnitsTableBody').rows;
 
             for (let i = 0; i < rows.length; i++) {
@@ -1770,6 +1891,37 @@
                 return;
             }
 
+            // فحص منع تكرار تفعيل نفس الكود
+            let currentLicense = null;
+            try {
+                currentLicense = JSON.parse(getStore('license_info'));
+            } catch(e) {}
+
+            let usedCodes = [];
+            try {
+                usedCodes = JSON.parse(getStore('bayan_used_license_codes') || '[]');
+            } catch(e) {}
+
+            // إذا كان نفس الكود مفعلاً وسارياً بالفعل حالياً
+            if (currentLicense && currentLicense.code === code && currentLicense.expiry) {
+                const curExp = new Date(currentLicense.expiry);
+                if (curExp > new Date()) {
+                    const expFormatted = curExp.toLocaleDateString('ar-EG');
+                    const msg = `⚠️ هذا الكود مفعّل وسارٍ بالفعل على هذا الجهاز (${currentLicense.plan}) حتى تاريخ ${expFormatted}، ولا حاجة لإعادة تفعيله!`;
+                    if (typeof showToast === 'function') showToast(msg, 'warning');
+                    else alert(msg);
+                    return;
+                }
+            }
+
+            // إذا كان الكود تم استخدامه واستهلاكه مسبقاً
+            if (usedCodes.includes(code)) {
+                const msg = "❌ عذراً، هذا الكود تم استخدامه واستهلاكه مسبقاً على هذا الجهاز! يرجى تجديد الاشتراك للحصول على كود جديد.";
+                if (typeof showToast === 'function') showToast(msg, 'error');
+                else alert(msg);
+                return;
+            }
+
             const mId = getStore('bayan_hwid') || getStore('bayan_machine_id') || '';
             const secret = atob("QkFZQU5fUE9TX1NFQ1JFVF9LRVlfMjAyNg=="); // مفتاح مشفر لمنع الفحص النصي البسيط في المتصفح
 
@@ -1874,7 +2026,13 @@
                         return;
                     }
 
-                    await LicenseService.saveLicenseLocally(planName, expiryDate.toISOString());
+                    await LicenseService.saveLicenseLocally(planName, expiryDate.toISOString(), code);
+
+                    // إضافة الكود لقائمة الأكواد المستهلكة
+                    if (!usedCodes.includes(code)) {
+                        usedCodes.push(code);
+                        setStore('bayan_used_license_codes', JSON.stringify(usedCodes));
+                    }
                     
                     if (typeof showToast === "function") showToast(`🎉 تم التفعيل بنجاح! أهلاً بك في ${planName}`, "success");
                     else alert(`تم التفعيل بنجاح! 🎉\nأهلاً بك في ${planName}.`);
@@ -1923,6 +2081,76 @@
                 else alert("كود التفعيل غير صحيح، يرجى التأكد من كتابته بشكل سليم.");
             }
         }
+        window.verifyAndActivateLicense = verifyAndActivateLicense;
+
+        // دالة توليد أكواد التفعيل الرسمية للإدارة
+        window.generateBayanLicenseKey = async function(machineId, plan = 'الباقة الشهرية', customExpiryDate = null) {
+            if (!machineId) return { success: false, message: "يرجى تحديد Machine ID" };
+            
+            let planChar = "M";
+            let expiryDate = new Date();
+            
+            if (plan.includes("سنة") || plan.includes("سنوية") || plan === "A") {
+                planChar = "A";
+                expiryDate.setDate(expiryDate.getDate() + 365);
+            } else if (plan.includes("حياة") || plan.includes("احترافية") || plan === "L") {
+                planChar = "L";
+                expiryDate = new Date(2099, 11, 31);
+            } else {
+                planChar = "M";
+                expiryDate.setDate(expiryDate.getDate() + 30);
+            }
+            
+            if (customExpiryDate instanceof Date && !isNaN(customExpiryDate)) {
+                expiryDate = customExpiryDate;
+            }
+            
+            const dd = String(expiryDate.getDate()).padStart(2, '0');
+            const mm = String(expiryDate.getMonth() + 1).padStart(2, '0');
+            const yy = String(expiryDate.getFullYear()).slice(-2);
+            const dateStr = dd + mm + yy;
+            
+            const payload = dateStr + planChar;
+            const secret = atob("QkFZQU5fUE9TX1NFQ1JFVF9LRVlfMjAyNg==");
+            
+            let hashGenerator;
+            if (typeof require !== "undefined") {
+                try {
+                    const { ipcRenderer } = require('electron');
+                    hashGenerator = async (dataStr) => await ipcRenderer.invoke('hash-activation-payload', dataStr);
+                } catch(e) {}
+            }
+            
+            if (!hashGenerator && window.crypto && window.crypto.subtle) {
+                try {
+                    const msgEncoder = new TextEncoder();
+                    const keyData = msgEncoder.encode(secret);
+                    const cryptoKey = await window.crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+                    hashGenerator = async (dataStr) => {
+                        const data = msgEncoder.encode(dataStr);
+                        const signature = await window.crypto.subtle.sign("HMAC", cryptoKey, data);
+                        const hashArray = Array.from(new Uint8Array(signature));
+                        return hashArray.map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase().substring(0, 16);
+                    };
+                } catch(e) {}
+            }
+            
+            if (!hashGenerator) {
+                return { success: false, message: "تعذر تشغيل التشفير" };
+            }
+            
+            const expectedHashFull = await hashGenerator(machineId.trim().toUpperCase() + payload);
+            const hash8 = expectedHashFull.substring(0, 8);
+            const activationKey = `BYN-${dateStr}-${planChar}-${hash8}`;
+            
+            return {
+                success: true,
+                activationKey: activationKey,
+                plan: plan,
+                expiryDate: expiryDate.toLocaleDateString('ar-EG'),
+                machineId: machineId
+            };
+        };
 
         function closeSubscription() {
             document.getElementById('subscriptionModal').classList.add('hidden');
@@ -2205,6 +2433,46 @@
             }
 
             document.getElementById('inquiryTotalStockBadge').textContent = `الإجمالي: ${totalStock}`;
+
+            // جدول تشكيلات المقاسات والألوان (Variants Matrix)
+            const variantsContainer = document.getElementById('inquiryVariantsContainer');
+            const variantsTableBody = document.getElementById('inquiryVariantsTableBody');
+            const variantsCountBadge = document.getElementById('inquiryVariantsCountBadge');
+            
+            if (variantsContainer && variantsTableBody) {
+                const variants = (product.variants && Array.isArray(product.variants) && product.variants.length > 0) ? product.variants : [];
+                if (variants.length > 0) {
+                    variantsContainer.style.display = 'block';
+                    if (variantsCountBadge) variantsCountBadge.textContent = `${variants.length} تشكيلة`;
+                    
+                    variantsTableBody.innerHTML = variants.map((v, idx) => {
+                        const stockVal = parseFloat(v.stock !== undefined ? v.stock : 0);
+                        const vRetail = parseFloat(v.price !== undefined ? v.price : product.price) || 0;
+                        const vWs = parseFloat(v.wholesale !== undefined ? v.wholesale : product.wholesale) || 0;
+                        
+                        let stockBadge = '';
+                        if (stockVal <= 0) {
+                            stockBadge = '<span style="background: #fee2e2; color: #ef4444; padding: 2px 8px; border-radius: 10px; font-weight: 800; font-size: 0.78rem;">0 (نفذ)</span>';
+                        } else {
+                            stockBadge = `<span style="background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 10px; font-weight: 900; font-size: 0.85rem;">${stockVal}</span>`;
+                        }
+
+                        return `
+                            <tr style="border-bottom: 1px solid #f1f5f9;">
+                                <td style="padding: 8px; font-weight: 800; color: #64748b;">${idx + 1}</td>
+                                <td style="padding: 8px;"><span style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 6px; font-weight: 900;">${v.size || 'قياسي'}</span></td>
+                                <td style="padding: 8px;"><span style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 2px 8px; border-radius: 6px; font-weight: 900;">${v.color || 'موحد'}</span></td>
+                                <td style="padding: 8px;">${stockBadge}</td>
+                                <td style="padding: 8px; font-weight: 900; color: #1e3a8a;">${vRetail.toFixed(2)} ج.م</td>
+                                <td style="padding: 8px; font-weight: 800; color: #166534;">${vWs.toFixed(2)} ج.م</td>
+                                <td style="padding: 8px; font-family: monospace; font-weight: bold; color: #475569;">${v.barcode || '---'}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                } else {
+                    variantsContainer.style.display = 'none';
+                }
+            }
 
             // جدول الوحدات
             const unitsTableBody = document.getElementById('inquiryUnitsTableBody');
@@ -3550,7 +3818,7 @@ window.LicenseService = {
         return Math.abs(hash ^ secretHash).toString(16).toUpperCase();
     },
 
-    saveLicenseLocally: async function(plan, expiry) {
+    saveLicenseLocally: async function(plan, expiry, code = '') {
         const machineId = (window.getUniqueHWID ? await window.getUniqueHWID() : '') || getStore('bayan_hwid') || getStore('bayan_machine_id') || 'LOCAL_DEVICE';
         const signature = await this.generateLicenseSignature(plan, expiry, machineId);
         
@@ -3558,6 +3826,7 @@ window.LicenseService = {
             id: 'license_info',
             plan: plan,
             expiry: expiry,
+            code: code,
             machineId: machineId,
             signature: signature,
             activationDate: new Date().toISOString(),
@@ -3568,6 +3837,7 @@ window.LicenseService = {
         window.activeLicense = {
             plan: plan,
             expiry: expiry,
+            code: code,
             isValid: true
         };
     },

@@ -5,6 +5,7 @@
 loadData().then(async () => {
     // 0. تحميل الإعدادات والشعار بعد اكتمال جلب البيانات من IndexedDB
     if (typeof loadSettings === 'function') loadSettings();
+    if (typeof applyBusinessTypeUI === 'function') applyBusinessTypeUI();
     if (typeof populatePaymentMethodSelects === 'function') populatePaymentMethodSelects();
     const savedLogo = getStore('bayan_business_logo');
     if (savedLogo && typeof updateLogoDisplays === 'function') {
@@ -30,6 +31,21 @@ loadData().then(async () => {
             .then(reg => console.log('📱 Service Worker registered for Android/Web Offline Mode:', reg.scope))
             .catch(err => console.warn('SW registration failed:', err));
     }
+
+    // 4. صمام الأمان الفولاذي: إنشاء نسخة احتياطية تلقائية وفورية في الخلفية عند الترقية لإصدار جديد
+    try {
+        const lastVer = getStore('bayan_last_run_version');
+        const curVer = window.appVersion || '2.0.0';
+        if (lastVer && lastVer !== curVer) {
+            console.log(`🛡️ [Safety Shield] Version upgrade detected (${lastVer} ➔ ${curVer}). Creating automatic background backup...`);
+            if (typeof window.executeAutoBackupToFile === 'function') {
+                window.executeAutoBackupToFile(true, false).then(() => {
+                    console.log('✅ Post-upgrade background safety backup created successfully.');
+                }).catch(err => console.warn('Post-upgrade backup notice:', err));
+            }
+        }
+        setStore('bayan_last_run_version', curVer);
+    } catch (e) { }
 
     console.log("🚀 نظام بَيَان المتكامل جاهز للعمل بنجاح!");
 });

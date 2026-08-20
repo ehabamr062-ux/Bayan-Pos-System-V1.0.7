@@ -2879,32 +2879,36 @@
         .bayan-tabs-container {
             background: #f1f5f9;
             display: flex;
-            padding: 5px 8px;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            margin: 6px 14px;
-            gap: 6px;
-            box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.08);
+            padding: 6px 10px;
+            border-radius: 14px;
+            border: 1.5px solid #e2e8f0;
+            margin: 6px 16px;
+            gap: 8px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04);
+            flex-wrap: wrap;
         }
 
         .bayan-tab {
-            padding: 6px 16px;
+            padding: 8px 18px;
             cursor: pointer;
-            font-weight: 700;
+            font-weight: 800;
             color: #64748b;
-            border-radius: 8px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            font-size: 0.85rem;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+            font-size: 0.88rem;
             border: 1.5px solid transparent;
             display: flex;
             align-items: center;
             justify-content: center;
+            gap: 6px;
+            user-select: none;
         }
 
         .bayan-tab:hover {
             color: #7c3aed;
-            background: rgba(124, 58, 237, 0.08);
-            transform: translateY(-1px);
+            background: #ffffff;
+            border-color: #cbd5e1;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
         }
 
         .bayan-tab.active {
@@ -2912,17 +2916,139 @@
             color: #ffffff !important;
             font-weight: 900 !important;
             border: 1.5px solid #a78bfa !important;
-            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35) !important;
-            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35) !important;
         }
 
         .bayan-tab-content {
-            background: rgba(255, 255, 255, 0.97);
+            background: #ffffff;
             color: #1e1b4b;
-            padding: 10px 14px;
+            padding: 14px 18px;
             overflow-y: auto;
-            max-height: calc(85vh - 210px);
-            border-radius: 0;
+            max-height: calc(85vh - 220px);
+            scrollbar-gutter: stable;
+        }
+
+        /* شريط تمرير فاخر لمحتوى كارت الصنف */
+        .bayan-tab-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        .bayan-tab-content::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        .bayan-tab-content::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #7c3aed, #4f46e5);
+            border-radius: 8px;
+        }
+        .bayan-tab-content::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(180deg, #6d28d9, #4338ca);
+        }
+
+        /* بطاقات الحقول المنسقة */
+        .bayan-input-card {
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+
+        .bayan-input-card:focus-within {
+            border-color: #7c3aed !important;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12) !important;
+        }
+
+        .bayan-card-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.84rem;
+            font-weight: 800;
+            color: #334155;
+            margin: 0;
+        }
+
+        .bayan-metric-card {
+            border-radius: 16px;
+            padding: 16px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border: 2px solid transparent;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .bayan-metric-card .metric-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .bayan-metric-card .metric-header .form-label {
+            margin: 0;
+            font-weight: 900;
+            font-size: 0.92rem;
+        }
+
+        .bayan-metric-card .metric-input {
+            font-size: 1.3rem !important;
+            font-weight: 900 !important;
+            text-align: center;
+            height: 44px !important;
+            border-radius: 10px !important;
+            background: #ffffff !important;
+            outline: none;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .bayan-metric-card .metric-hint {
+            font-size: 0.76rem;
+            font-weight: 700;
+            opacity: 0.85;
+            text-align: center;
+        }
+
+        .bayan-metric-card.emerald {
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            border-color: #10b981;
+        }
+        .bayan-metric-card.emerald .form-label,
+        .bayan-metric-card.emerald .metric-hint {
+            color: #065f46;
+        }
+        .bayan-metric-card.emerald .metric-input {
+            border: 2px solid #10b981 !important;
+            color: #047857;
+        }
+
+        .bayan-metric-card.blue {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border-color: #3b82f6;
+        }
+        .bayan-metric-card.blue .form-label,
+        .bayan-metric-card.blue .metric-hint {
+            color: #1e40af;
+        }
+        .bayan-metric-card.blue .metric-input {
+            border: 2px solid #3b82f6 !important;
+            color: #1d4ed8;
+        }
+
+        .bayan-metric-card.amber {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            border-color: #f59e0b;
+        }
+        .bayan-metric-card.amber .form-label,
+        .bayan-metric-card.amber .metric-hint {
+            color: #92400e;
+        }
+        .bayan-metric-card.amber .metric-input {
+            border: 2px solid #f59e0b !important;
+            color: #b45309;
         }
 
         .bayan-units-grid {
@@ -3127,7 +3253,7 @@
             background: var(--gold);
             color: white;
             box-shadow: 0 0 20px var(--gold-light);
-            transform: translateY(-50%) scale(1.1);
+            transform: translateY(-50%);
         }
 
         .invoice-nav-container {
@@ -6434,125 +6560,227 @@
 
         .sub-plans {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-            padding: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            padding: 24px 20px;
             background: #f8fafc;
         }
 
         .plan-card {
-            background: white;
-            border: 2px solid #f1f5f9;
-            border-radius: 15px;
-            padding: 15px;
+            background: #ffffff;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 20px;
+            padding: 20px 16px;
             text-align: center;
-            transition: 0.3s;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             position: relative;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+            overflow: visible;
         }
 
         .plan-card:hover {
-            transform: translateY(-10px);
-            border-color: var(--gold);
-            box-shadow: 0 4px 12px rgba(197, 160, 89, 0.15);
+            transform: translateY(-8px);
+            border-color: #cbd5e1;
+            box-shadow: 0 20px 30px -10px rgba(15, 23, 42, 0.12), 0 10px 15px -5px rgba(15, 23, 42, 0.05);
         }
 
-        .plan-card.featured {
-            background: #fff;
-            border-color: var(--gold);
-            transform: scale(1.05);
+        /* باقة التجربة */
+        .plan-card#plan-باقة\ نسخة\ المجانية {
+            border: 1.5px solid #e2e8f0;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        }
+
+        /* الباقة الشهرية */
+        .plan-card#plan-الباقة\ الأساسية {
+            border: 1.5px solid #bfdbfe;
+            background: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%);
+        }
+        .plan-card#plan-الباقة\ الأساسية:hover {
+            border-color: #60a5fa;
+            box-shadow: 0 20px 30px -10px rgba(59, 130, 246, 0.18);
+        }
+
+        /* الباقة السنوية - الأكثر مبيعاً */
+        .plan-card.featured,
+        .plan-card#plan-الباقة\ المتقدمة {
+            background: linear-gradient(180deg, #ffffff 0%, #fffdf0 100%);
+            border: 2px solid #f59e0b;
+            transform: scale(1.02);
             z-index: 2;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 15px 35px -5px rgba(245, 158, 11, 0.18);
         }
 
-        .plan-card.featured::after {
-            content: "الأكثر مبيعاً";
+        .plan-card.featured:hover,
+        .plan-card#plan-الباقة\ المتقدمة:hover {
+            transform: scale(1.03) translateY(-8px);
+            border-color: #d97706;
+            box-shadow: 0 25px 40px -10px rgba(245, 158, 11, 0.28);
+        }
+
+        .plan-card.featured::after,
+        .plan-card#plan-الباقة\ المتقدمة::after {
+            content: "🔥 الأكثر مبيعاً وتوفيراً";
             position: absolute;
-            top: -15px;
+            top: -14px;
             left: 50%;
             transform: translateX(-50%);
-            background: linear-gradient(135deg, #d4af37, #fde68a);
-            color: #000;
-            padding: 6px 25px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #ffffff;
+            padding: 4px 18px;
             border-radius: 50px;
-            font-size: 0.85rem;
+            font-size: 0.78rem;
             font-weight: 900;
-            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
+            border: 2px solid #ffffff;
             white-space: nowrap;
             z-index: 10;
         }
 
+        /* الباقة مدى الحياة - VIP */
+        .plan-card#plan-الباقة\ الاحترافية {
+            border: 2px solid #eab308;
+            background: linear-gradient(180deg, #ffffff 0%, #fefce8 100%);
+            box-shadow: 0 15px 35px -5px rgba(234, 179, 8, 0.15);
+        }
+        .plan-card#plan-الباقة\ الاحترافية:hover {
+            border-color: #ca8a04;
+            box-shadow: 0 25px 40px -10px rgba(234, 179, 8, 0.25);
+        }
+
         .plan-badge {
             font-size: 2.2rem;
-            margin-bottom: 15px;
-            display: block;
+            margin-bottom: 8px;
+            display: inline-block;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.08));
         }
 
         .plan-name {
-            font-size: 1.4rem;
+            font-size: 1.25rem;
             font-weight: 900;
-            color: #1e293b;
-            margin-bottom: 10px;
+            color: #0f172a;
+            margin-bottom: 8px;
+            letter-spacing: -0.3px;
         }
 
         .plan-price {
-            font-size: 2rem;
+            font-size: 1.8rem;
             font-weight: 900;
-            color: var(--main-blue);
-            margin-bottom: 20px;
+            color: #1e3a8a;
+            margin-bottom: 15px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #e2e8f0;
         }
 
         .plan-price span {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             color: #64748b;
-            font-weight: normal;
+            font-weight: 600;
         }
 
         .plan-features {
             list-style: none;
             padding: 0;
-            margin: 0 0 25px 0;
+            margin: 0 0 18px 0;
             text-align: right;
-            font-size: 0.95rem;
-            color: #475569;
-        }
-
-        .plan-features li {
-            margin-bottom: 10px;
+            font-size: 0.85rem;
+            color: #334155;
             display: flex;
-            align-items: center;
+            flex-direction: column;
             gap: 8px;
         }
 
+        .plan-features li {
+            margin-bottom: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            line-height: 1.4;
+        }
+
         .plan-features li::before {
-            content: "✅";
-            font-size: 0.9rem;
+            content: "✓";
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            background: #ecfdf5;
+            color: #059669;
+            border-radius: 50%;
+            font-size: 0.75rem;
+            font-weight: 900;
+            flex-shrink: 0;
         }
 
         .sub-btn {
-            background: #1e293b;
-            color: white;
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            color: #ffffff;
             border: none;
-            padding: 12px;
+            padding: 10px 14px;
             border-radius: 12px;
-            font-size: 1rem;
+            font-size: 0.95rem;
             font-weight: 800;
             cursor: pointer;
-            transition: 0.3s;
+            transition: all 0.25s ease;
             width: 100%;
+            box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15);
         }
 
         .sub-btn:hover {
-            background: #0f172a;
-            transform: scale(1.02);
+            background: linear-gradient(135deg, #0f172a, #020617);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(15, 23, 42, 0.25);
         }
 
-        .plan-card.featured .sub-btn {
-            background: var(--gold);
-            color: #1a1600;
+        .plan-card.featured .sub-btn,
+        .plan-card#plan-الباقة\ المتقدمة .sub-btn {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+        }
+
+        .plan-card.featured .sub-btn:hover,
+        .plan-card#plan-الباقة\ المتقدمة .sub-btn:hover {
+            background: linear-gradient(135deg, #d97706, #b45309);
+            box-shadow: 0 6px 18px rgba(245, 158, 11, 0.4);
+        }
+
+        .plan-card#plan-الباقة\ الاحترافية .sub-btn {
+            background: linear-gradient(135deg, #eab308, #ca8a04);
+            color: #000000;
+            box-shadow: 0 4px 12px rgba(234, 179, 8, 0.3);
+        }
+
+        .plan-card#plan-الباقة\ الاحترافية .sub-btn:hover {
+            background: linear-gradient(135deg, #ca8a04, #a16207);
+            color: #ffffff;
+            box-shadow: 0 6px 18px rgba(234, 179, 8, 0.4);
+        }
+
+        .details-btn {
+            width: 38px;
+            height: 38px;
+            background: #ffffff;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.25s ease;
+            color: #475569;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+        }
+
+        .details-btn:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.06);
         }
 
         .sub-footer {
@@ -7038,131 +7266,7 @@
             font-size: 1.1rem;
         }
 
-        .sub-plans {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-            padding: 15px;
-            background: #f8fafc;
-        }
-
-        .plan-card {
-            background: white;
-            border: 2px solid #f1f5f9;
-            border-radius: 20px;
-            padding: 15px;
-            text-align: center;
-            transition: 0.3s;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            position: relative;
-        }
-
-        .plan-card:hover {
-            transform: translateY(-10px);
-            border-color: var(--gold);
-            box-shadow: 0 4px 12px rgba(197, 160, 89, 0.15);
-        }
-
-        .plan-card.featured {
-            background: #fff;
-            border-color: var(--gold);
-            transform: scale(1.05);
-            z-index: 2;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-        }
-
-        .plan-card.featured::after {
-            content: "الأكثر مبيعاً";
-            position: absolute;
-            top: -15px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--gold);
-            color: #1a1a1a;
-            padding: 5px 20px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 900;
-        }
-
-        .plan-badge {
-            font-size: 2.2rem;
-            margin-bottom: 15px;
-            display: block;
-        }
-
-        .plan-name {
-            font-size: 1.4rem;
-            font-weight: 900;
-            color: #1e293b;
-            margin-bottom: 10px;
-        }
-
-        .plan-price {
-            font-size: 2rem;
-            font-weight: 900;
-            color: var(--main-blue);
-            margin-bottom: 20px;
-        }
-
-        .plan-price span {
-            font-size: 0.9rem;
-            color: #64748b;
-            font-weight: normal;
-        }
-
-        .plan-features {
-            list-style: none;
-            padding: 0;
-            margin: 0 0 25px 0;
-            text-align: right;
-            font-size: 0.95rem;
-            color: #475569;
-        }
-
-        .plan-features li {
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .plan-features li::before {
-            content: "✅";
-            font-size: 0.9rem;
-        }
-
-        .sub-btn {
-            background: #1e293b;
-            color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 800;
-            cursor: pointer;
-            transition: 0.3s;
-            width: 100%;
-        }
-
-        .sub-btn:hover {
-            background: #0f172a;
-            transform: scale(1.02);
-        }
-
-        .plan-card.featured .sub-btn {
-            background: var(--gold);
-            color: #1a1600;
-        }
-
-        .sub-footer {
-            padding: 20px;
-            text-align: center;
-            background: #fff;
-            border-top: 1px solid #f1f5f9;
-        }
+        /* End of Subscription Modal Styles */
 
         .contact-sales {
             font-weight: 800;
@@ -9278,4 +9382,49 @@ body.dark-mode select:not(.login-select) option {
     border-radius: 12px !important;
     border: 2.5px solid #f59e0b !important;
 }
+
+/* =========================================================================
+   ✨ التحكم الديناميكي الدقيق في إظهار وإخفاء أقسام الشاشة الرئيسية
+   ========================================================================= */
+.bayan-hide-sec-price-tracking .dm-sec-price-tracking,
+.bayan-hide-sec-invoices .dm-sec-invoices,
+.bayan-hide-sec-accounts .dm-sec-accounts,
+.bayan-hide-sec-inventory .dm-sec-inventory,
+.bayan-hide-sec-product-inquiry .dm-sec-product-inquiry,
+.bayan-hide-sec-ai-assistant .dm-sec-ai-assistant,
+.bayan-hide-sec-analysis .dm-sec-analysis,
+.bayan-hide-sec-daily-report .dm-sec-daily-report,
+.bayan-hide-sec-new-account .dm-sec-new-account,
+.bayan-hide-sec-new-item .dm-sec-new-item,
+.bayan-hide-sec-price-mgmt .dm-sec-price-mgmt,
+.bayan-hide-sec-receipt .dm-sec-receipt,
+.bayan-hide-sec-sales .dm-sec-sales,
+.bayan-hide-sec-disbursement .dm-sec-disbursement,
+.bayan-hide-sec-sales-return .dm-sec-sales-return,
+.bayan-hide-sec-purchase-return .dm-sec-purchase-return,
+.bayan-hide-sec-purchase .dm-sec-purchase,
+.bayan-hide-sec-adjustment .dm-sec-adjustment,
+.bayan-hide-sec-history .dm-sec-history,
+.bayan-hide-sec-warehouse-report .dm-sec-warehouse-report,
+.bayan-hide-sec-statement .dm-sec-statement,
+.bayan-hide-sec-shortcuts .dm-sec-shortcuts,
+.bayan-hide-sec-transfer .dm-sec-transfer,
+.bayan-hide-sec-calculator .dm-sec-calculator,
+.bayan-hide-sec-treasury .dm-sec-treasury {
+    display: none !important;
+}
+
+/* =========================================================================
+   ✨ إخفاء أعمدة ونوافذ المقاسات والألوان تلقائياً عند اختيار السوبر ماركت أو البقالة أو التجارة العامة
+   ========================================================================= */
+body.bayan-variants-disabled .col-variant-size,
+body.bayan-variants-disabled .col-variant-color,
+body.bayan-variants-disabled #inquiryVariantsCard,
+body.bayan-variants-disabled .variant-only-element,
+body.bayan-variants-disabled #bayanVariantPickerOverlay {
+    display: none !important;
+}
+
+
+
 

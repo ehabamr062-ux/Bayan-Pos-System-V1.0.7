@@ -74,14 +74,76 @@
 
 
 
-    // 5. منع سحب وإسقاط الصور والنصوص
+    // 4. تصفير وتعطيل الكونسول بالكامل لمنع كشف أي بيانات أو أوامر
+    (function () {
+        const noop = function () {};
+        const methods = ['log', 'debug', 'info', 'warn', 'error', 'table', 'trace', 'dir', 'dirxml', 'group', 'groupCollapsed', 'groupEnd', 'time', 'timeEnd', 'profile', 'profileEnd', 'count'];
+        for (let i = 0; i < methods.length; i++) {
+            try {
+                window.console[methods[i]] = noop;
+            } catch (e) {}
+        }
+    })();
+
+    // 5. مصيدة إيقاف فوري لمن يفتح أدوات المطورين (Anti-DevTools & Debugger Trap)
+    (function () {
+        let devtoolsOpen = false;
+        const element = new Image();
+        Object.defineProperty(element, 'id', {
+            get: function () {
+                devtoolsOpen = true;
+                handleDevToolsDetected();
+            }
+        });
+
+        function handleDevToolsDetected() {
+            try {
+                console.clear();
+                // إظهار شاشة الحظر التلقائي
+                let lockOverlay = document.getElementById('bayanSecurityLockOverlay');
+                if (!lockOverlay) {
+                    lockOverlay = document.createElement('div');
+                    lockOverlay.id = 'bayanSecurityLockOverlay';
+                    lockOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0f172a;z-index:99999999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center;font-family:sans-serif;direction:rtl;';
+                    lockOverlay.innerHTML = `
+                        <div style="font-size:4rem;margin-bottom:15px;">🛡️</div>
+                        <h1 style="color:#ef4444;font-size:1.8rem;margin-bottom:10px;font-weight:900;">⚠️ تم حظر الوصول لأدوات المطورين</h1>
+                        <p style="color:#94a3b8;font-size:1.1rem;max-width:500px;line-height:1.6;margin-bottom:20px;">
+                            نظام بَيَان POS محمي بالكامل. تم إيقاف وتجميد الشاشة لحماية أمان وتراخيص النظام.
+                        </p>
+                        <button onclick="location.reload()" style="background:#22c55e;color:#fff;border:none;padding:12px 25px;border-radius:12px;font-size:1rem;font-weight:bold;cursor:pointer;">
+                            إعادة تحميل النظام 🔄
+                        </button>
+                    `;
+                    document.body.appendChild(lockOverlay);
+                }
+            } catch (e) {}
+        }
+
+        // فحص دوري خفيف لاستهلاك صفر موارد
+        setInterval(function () {
+            // فحص عبر أبعاد الشاشة
+            const threshold = 160;
+            const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+            const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+            if (widthThreshold || heightThreshold) {
+                handleDevToolsDetected();
+            }
+            // فحص عبر التمرير على الكونسول
+            try {
+                console.log(element);
+            } catch (e) {}
+        }, 1500);
+    })();
+
+    // 6. منع سحب وإسقاط الصور والنصوص
     document.addEventListener('dragstart', function (e) {
         if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
             e.preventDefault();
         }
     });
 
-    // 6. طبقة تشفير وتأمين التخزين المحلي والجلسة (Secure Storage Shield)
+    // 7. طبقة تشفير وتأمين التخزين المحلي والجلسة (Secure Storage Shield)
     window.BayanSecurity = {
         // تشفير خفيف وسريع للبيانات الحساسة
         obfuscate: function (str) {
@@ -105,7 +167,6 @@
         validateSession: function () {
             const user = window.currentUser;
             if (!user && document.getElementById('loginModal') && document.getElementById('loginModal').style.display === 'none') {
-                console.warn('⚠️ جلسة غير مصرح بها. إعادة التوجيه لشاشة تسجيل الدخول...');
                 if (typeof window.showLoginScreen === 'function') window.showLoginScreen();
             }
         }
