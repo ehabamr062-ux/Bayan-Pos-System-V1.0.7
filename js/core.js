@@ -289,6 +289,24 @@ async function loadData() {
         trashBin = trData || [];
         auditLogs = logData || [];
 
+        // 🔄 مزامنة ومعالجة الفروق في أرصدة التشكيلات تلقائياً (Self-Healing Variant Stocks)
+        if (productsDB && productsDB.length > 0) {
+            let hasChanged = false;
+            productsDB.forEach(p => {
+                if (p.variants && Array.isArray(p.variants) && p.variants.length > 0) {
+                    const pStock = parseFloat(p.stock) || 0;
+                    const vSum = p.variants.reduce((sum, v) => sum + (parseFloat(v.stock) || 0), 0);
+                    if (pStock > 0 && vSum === 0) {
+                        p.variants[0].stock = pStock;
+                        hasChanged = true;
+                    }
+                }
+            });
+            if (hasChanged && typeof db !== 'undefined' && db.products) {
+                db.products.bulkPut(productsDB).catch(e => console.warn("Self-healing variant sync:", e));
+            }
+        }
+
         console.log("✅ Data successfully loaded from IndexedDB in parallel.");
     } catch (err) {
         console.error("❌ Failed to load data from IndexedDB:", err);

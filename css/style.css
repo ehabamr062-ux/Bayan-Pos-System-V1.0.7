@@ -327,8 +327,7 @@
         body.has-wallpaper .table-container,
         body.has-wallpaper .panel-header,
         body.has-wallpaper .inv-filters,
-        body.has-wallpaper .accounts-sidebar,
-        body.has-wallpaper .dm-header {
+        body.has-wallpaper .accounts-sidebar {
             background: rgba(255, 255, 255, 0.95) !important;
             /* backdrop-filter disabled */
             /* -webkit-backdrop-filter disabled */
@@ -341,8 +340,7 @@
         body.dark-mode.has-wallpaper .table-container,
         body.dark-mode.has-wallpaper .panel-header,
         body.dark-mode.has-wallpaper .inv-filters,
-        body.dark-mode.has-wallpaper .accounts-sidebar,
-        body.dark-mode.has-wallpaper .dm-header {
+        body.dark-mode.has-wallpaper .accounts-sidebar {
             background: rgba(15, 15, 20, 0.96) !important;
             /* backdrop-filter disabled */
             /* -webkit-backdrop-filter disabled */
@@ -809,14 +807,13 @@
             background: linear-gradient(rgba(12, 12, 14, 0.90), rgba(12, 12, 14, 0.92)),
                 url('https://www.transparenttextures.com/patterns/dark-leather.png');
             /* خلفية جلدية فخمة */
-            padding: 4px 8px;
+            padding: 8px 12px 15px 12px !important;
             display: flex;
             flex-direction: column;
-            gap: 5px;
-            overflow: hidden !important;
+            gap: 8px;
+            overflow-y: auto !important;
             color: white;
-            height: 100vh;
-            max-height: 100vh;
+            min-height: 100vh;
             box-sizing: border-box;
         }
 
@@ -828,19 +825,23 @@
         .dm-header {
             display: flex;
             justify-content: space-between;
-            align-items: stretch;
-            gap: 10px;
-            background: rgba(255, 255, 255, 0.02);
-            padding: 5px 10px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            align-items: center;
+            gap: 12px;
+            background: transparent !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            min-height: 0 !important;
+            width: 100%;
+            flex-wrap: wrap;
         }
 
         .dm-header-right {
             display: flex;
             align-items: center;
-            gap: 15px;
-            padding: 0 15px;
+            gap: 10px;
+            padding: 0;
+            flex-wrap: wrap;
         }
 
         .dm-logo-box {
@@ -891,9 +892,8 @@
             display: flex;
             gap: 12px;
             align-items: center;
-            width: 100%;
-            justify-content: space-between;
-            padding: 5px 0;
+            margin-right: auto;
+            padding: 0;
         }
 
         .dm-top-tile {
@@ -966,16 +966,19 @@
             justify-content: center;
             gap: 4px;
             cursor: pointer;
-            transition: 0.3s;
+            transition: background-color 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
             padding: 5px;
             box-sizing: border-box;
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+            transform: none !important;
         }
 
         .dm-mid-tile:hover {
             background: #13466a;
-            transform: scale(1.03);
+            transform: none !important;
+            filter: brightness(1.15);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.3);
         }
 
         .dm-mid-tile.blue {
@@ -984,6 +987,9 @@
 
         .dm-mid-tile.blue:hover {
             background: #42a5f5;
+            transform: none !important;
+            filter: brightness(1.15);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.3);
         }
 
         .dm-mid-tile .icon {
@@ -1013,16 +1019,18 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: background-color 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
             position: relative;
             box-shadow: 0 4px 10px rgba(0,0,0,0.2);
             border: 1px solid rgba(255, 255, 255, 0.1);
+            transform: none !important;
         }
 
         .dm-action-tile:hover {
-            transform: translateY(-8px) scale(1.02);
-            filter: brightness(1.2);
-            box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+            transform: none !important;
+            filter: brightness(1.15) !important;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35) !important;
+            border-color: rgba(255, 255, 255, 0.3) !important;
         }
 
         .dm-action-tile .icon {
@@ -2027,6 +2035,68 @@
             visibility: visible !important;
         }
 
+        #customerSearchResults.search-results,
+        #supplierSearchResults.search-results {
+            min-width: 250px !important;
+            max-width: 320px !important;
+            right: 0 !important;
+            left: auto !important;
+            top: 66px !important;
+            border-radius: 12px !important;
+            border: 1.5px solid #cbd5e1 !important;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15) !important;
+            background: #ffffff !important;
+            z-index: 999999 !important;
+            overflow: hidden !important;
+        }
+
+        body.dark-mode #customerSearchResults.search-results,
+        body.dark-mode #supplierSearchResults.search-results {
+            background: #1e293b !important;
+            border-color: #475569 !important;
+            color: #f8fafc !important;
+        }
+
+        #searchResults.search-results,
+        #purchaseSearchResults.search-results {
+            position: absolute !important;
+            top: 66px !important;
+            right: 0 !important;
+            left: auto !important;
+            width: 100% !important;
+            max-height: none !important;
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+            z-index: 999999 !important;
+        }
+
+        #searchResults .pos-search-panel {
+            margin: 0 auto !important;
+        }
+
+        body.dark-mode .pos-search-panel {
+            background: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f8fafc !important;
+        }
+
+        body.dark-mode .pos-search-panel thead tr {
+            background: #0f172a !important;
+            color: #94a3b8 !important;
+            border-color: #334155 !important;
+        }
+
+        body.dark-mode .pos-search-panel tbody tr {
+            border-color: #334155 !important;
+        }
+
+        body.dark-mode .pos-search-panel tbody tr:hover {
+            background: #334155 !important;
+        }
+
         .result-item {
             padding: 10px;
             cursor: pointer;
@@ -2677,7 +2747,6 @@
         }
 
         body.has-wallpaper .dm-main-grid,
-        body.has-wallpaper .dm-header,
         body.has-wallpaper .dm-mid-grid {
             padding: 15px;
             border-radius: 20px;
@@ -8477,11 +8546,12 @@ body.dark-mode .moon-icon {
             background: rgba(10, 10, 12, 0.9) !important;
         }
 
-        /* --- ??????? ????? ??????? ???????? (Action Tiles) --- */
+        /* --- مربعات الشاشة الرئيسية (Action Tiles) --- */
         .dm-action-tile {
             height: 120px !important;
             border: 1px solid rgba(255,255,255,0.15) !important;
             box-shadow: 0 8px 15px rgba(0,0,0,0.2) !important;
+            transform: none !important;
         }
 
         .dm-action-tile .label {
@@ -8497,9 +8567,10 @@ body.dark-mode .moon-icon {
         }
 
         .dm-action-tile:hover {
-            transform: translateY(-5px) scale(1.05) !important;
-            filter: brightness(1.1) !important;
-            box-shadow: 0 15px 30px rgba(0,0,0,0.4) !important;
+            transform: none !important;
+            filter: brightness(1.15) !important;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.35) !important;
+            border-color: rgba(255,255,255,0.35) !important;
         }
 
         /* ????? ????? ?????? */

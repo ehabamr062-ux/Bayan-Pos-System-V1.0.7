@@ -261,7 +261,7 @@
     }
 
     function getCurrentAppVersion() {
-        return window.appVersion || '2.0.0';
+        return window.appVersion || '2.0.1';
     }
 
     function fmtNotes(notes) {

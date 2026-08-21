@@ -72,6 +72,12 @@ async function saveSettings() {
         enableVariantsMatrix: document.getElementById('enableVariantsMatrix') ? document.getElementById('enableVariantsMatrix').checked : true,
         splitWholesaleRetailReports: document.getElementById('splitWholesaleRetailReports') ? document.getElementById('splitWholesaleRetailReports').checked : true,
         enableSimpleStaffDashboard: document.getElementById('enableSimpleStaffDashboard') ? document.getElementById('enableSimpleStaffDashboard').checked : true,
+        businessTypeSections: (() => {
+            const activeType = document.getElementById('appBusinessType') ? document.getElementById('appBusinessType').value : "clothing";
+            const bSections = currentSettings.businessTypeSections || {};
+            bSections[activeType] = getDashboardSectionsVisibilityState();
+            return bSections;
+        })(),
         visibleDashboardSections: getDashboardSectionsVisibilityState()
     };
     setStore('pos_settings', JSON.stringify(settings));
@@ -120,8 +126,8 @@ function setAllDashboardSectionsVisibility(visible = true) {
     document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
         chk.checked = visible;
     });
-    applyBusinessTypeUI();
-    showToast(visible ? "✅ تم تحديد إظهار جميع الأقسام" : "⚠️ تم إلغاء تحديد الأقسام", "info");
+    syncSectionsDOMFromCheckboxes();
+    showToast(visible ? "✅ تم تحديد إظهار جميع الأقسام (25 قسماً)" : "⚠️ تم إلغاء تحديد الأقسام", "info");
 }
 
 function applyStaffPresetVisibility() {
@@ -131,12 +137,56 @@ function applyStaffPresetVisibility() {
         const sec = chk.getAttribute('data-sec');
         chk.checked = activeStaffSections.includes(sec);
     });
-    applyBusinessTypeUI();
+    syncSectionsDOMFromCheckboxes();
     showToast("✨ تم تطبيق التشكيل السريع الموصى به للكاشير بنجاح!", "success");
+}
+
+function syncSectionsDOMFromCheckboxes() {
+    document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
+        const sec = chk.getAttribute('data-sec');
+        if (sec) {
+            const hideClass = `bayan-hide-sec-${sec}`;
+            if (chk.checked) {
+                document.body.classList.remove(hideClass);
+            } else {
+                document.body.classList.add(hideClass);
+            }
+        }
+    });
+}
+
+function updateLoginBadgeUI(type) {
+    const loginBadgeName = document.getElementById('loginBusinessName');
+    const loginBadgeIcon = document.getElementById('loginBusinessIcon');
+    if (loginBadgeName && loginBadgeIcon) {
+        if (type === 'supermarket') {
+            loginBadgeName.innerText = 'سوبر ماركت ومواد غذائية';
+            loginBadgeIcon.innerText = '🛒';
+            loginBadgeIcon.style.background = 'linear-gradient(135deg, #0284c7, #0369a1)';
+        } else {
+            loginBadgeName.innerText = 'ملابس وأحذية وشنط';
+            loginBadgeIcon.innerText = '👕';
+            loginBadgeIcon.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        }
+    }
 }
 
 function selectBusinessType(type) {
     const hiddenInput = document.getElementById('appBusinessType');
+    const oldType = hiddenInput ? (hiddenInput.value || 'clothing') : 'clothing';
+
+    let settings = {};
+    try {
+        settings = JSON.parse(getStore('pos_settings') || '{}');
+    } catch (e) {}
+
+    settings.businessTypeSections = settings.businessTypeSections || {};
+
+    // 1. حفظ التخصيص الحالي للنشاط السابق قبل التبديل
+    if (oldType) {
+        settings.businessTypeSections[oldType] = getDashboardSectionsVisibilityState();
+    }
+
     if (hiddenInput) hiddenInput.value = type;
 
     // تحديث المظهر المرئي للكروت
@@ -165,48 +215,68 @@ function selectBusinessType(type) {
         }
     }
 
-    // ضبط الخيارات التلقائية والأقسام بناءً على نوع النشاط
+    // 2. تحديث مصفوفة المقاسات والألوان وخيار الفتح المباشر على شاشة البيع
     const variantsCheck = document.getElementById('enableVariantsMatrix');
     if (variantsCheck) {
         variantsCheck.checked = (type === 'clothing');
     }
-
     const directSalesCheck = document.getElementById('directToSalesOnLogin');
-    if (directSalesCheck) {
-        directSalesCheck.checked = (type === 'clothing');
+    if (directSalesCheck && type === 'clothing') {
+        directSalesCheck.checked = true;
     }
 
-    // لأنشطة السوبر ماركت والتجارة العامة: فتح وإظهار كافة الأقسام الـ 25 تلقائياً
-    if (type === 'supermarket' || type === 'general') {
-        document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
-            chk.checked = true;
-        });
-    } else if (type === 'clothing') {
-        // للملابس: تفعيل نظام المقاسات والألوان وتطبيق الأقسام الموصى بها
-        const activeStaffSections = ['sales', 'sales-return', 'receipt', 'disbursement', 'daily-report', 'invoices', 'accounts', 'inventory', 'statement'];
-        document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
-            const sec = chk.getAttribute('data-sec');
-            chk.checked = activeStaffSections.includes(sec);
-        });
+    if (type === 'clothing') {
+        document.body.classList.add('bayan-variants-enabled');
+        document.body.classList.remove('bayan-variants-disabled');
+    } else {
+        document.body.classList.remove('bayan-variants-enabled');
+        document.body.classList.add('bayan-variants-disabled');
     }
 
-    applyBusinessTypeUI();
+    // 3. استعادة تخصيص الأقسام المحفوظ الخاص بهذا النشاط بدقة
+    const savedTypeSections = settings.businessTypeSections[type];
+    const activeStaffSections = ['sales', 'sales-return', 'receipt', 'disbursement', 'daily-report', 'invoices', 'accounts', 'inventory', 'statement'];
+
+    document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
+        const sec = chk.getAttribute('data-sec');
+        if (sec) {
+            if (savedTypeSections && savedTypeSections[sec] !== undefined) {
+                // استعادة ما اختاره المستخدم لهذا النشاط بالضبط
+                chk.checked = !!savedTypeSections[sec];
+            } else if (type === 'clothing') {
+                // إذا لم يسبق له تخصيصه، نضع الموصى به افتراضياً
+                chk.checked = activeStaffSections.includes(sec);
+            } else {
+                // سوبر ماركت: الافتراضي أول مرة إظهار الكل
+                chk.checked = true;
+            }
+        }
+    });
+
+    // تحديث وحفظ الإعدادات النشطة فوراً
+    settings.businessType = type;
+    settings.visibleDashboardSections = getDashboardSectionsVisibilityState();
+    setStore('pos_settings', JSON.stringify(settings));
+
+    syncSectionsDOMFromCheckboxes();
+    updateLoginBadgeUI(type);
 
     if (typeof showToast === 'function') {
         const names = { 
-            clothing: 'ملابس وأحذية وشنط 👕 (نظام المقاسات والألوان مفعل)', 
-            supermarket: 'سوبر ماركت ومواد غذائية 🛒 (كافة الأقسام الـ 25 مفعلة)', 
-            general: 'تجارة عامة وجملة وتوزيع 📦 (كافة الأقسام الـ 25 مفعلة)' 
+            clothing: 'ملابس وأحذية وشنط 👕', 
+            supermarket: 'سوبر ماركت ومواد غذائية 🛒'
         };
-        showToast(`🎯 تم اختيار نشاط: ${names[type] || type}`, 'info');
+        showToast(`🎯 تم التحويل إلى نشاط: ${names[type] || type} واستعادة أقسامك المخصصة بنجاح!`, 'info');
     }
 }
 
 function applyBusinessTypeUI() {
     const settings = JSON.parse(getStore('pos_settings') || '{}');
-    const type = settings.businessType || 'clothing';
-    const enableVariants = settings.enableVariantsMatrix !== undefined ? !!settings.enableVariantsMatrix : (type === 'clothing');
-    const sectionsMap = settings.visibleDashboardSections || null;
+    const typeInput = document.getElementById('appBusinessType');
+    const type = typeInput ? typeInput.value : (settings.businessType || 'clothing');
+    
+    const variantsCheck = document.getElementById('enableVariantsMatrix');
+    const enableVariants = variantsCheck ? variantsCheck.checked : (settings.enableVariantsMatrix !== undefined ? !!settings.enableVariantsMatrix : (type === 'clothing'));
 
     // 1. التحكم في مصفوفة المقاسات والألوان
     if (enableVariants) {
@@ -217,46 +287,38 @@ function applyBusinessTypeUI() {
         document.body.classList.add('bayan-variants-disabled');
     }
 
-    // 2. تطبيق إظهار وإخفاء كل قسم بشكل دقيق ونظيف
-    const allKnownSections = [
-        'sales', 'sales-return', 'receipt', 'disbursement', 'daily-report',
-        'invoices', 'accounts', 'inventory', 'product-inquiry', 'treasury',
-        'statement', 'calculator', 'analysis', 'new-account', 'new-item',
-        'price-tracking', 'ai-assistant', 'shortcuts', 'adjustment',
-        'history', 'price-mgmt', 'transfer', 'warehouse-report', 'purchase', 'purchase-return'
-    ];
-    const activeClothingSections = ['sales', 'sales-return', 'receipt', 'disbursement', 'daily-report', 'invoices', 'accounts', 'inventory', 'statement'];
+    // 2. تطبيق إظهار وإخفاء كل قسم
+    const toggles = document.querySelectorAll('.dash-sec-toggle');
+    if (toggles.length > 0) {
+        syncSectionsDOMFromCheckboxes();
+    } else {
+        const allKnownSections = [
+            'sales', 'sales-return', 'receipt', 'disbursement', 'daily-report',
+            'invoices', 'accounts', 'inventory', 'product-inquiry', 'treasury',
+            'statement', 'calculator', 'analysis', 'new-account', 'new-item',
+            'price-tracking', 'ai-assistant', 'shortcuts', 'adjustment',
+            'history', 'price-mgmt', 'transfer', 'warehouse-report', 'purchase', 'purchase-return'
+        ];
+        const activeTypeSections = settings.businessTypeSections ? settings.businessTypeSections[type] : null;
+        const sectionsMap = activeTypeSections || settings.visibleDashboardSections || null;
 
-    allKnownSections.forEach(secKey => {
-        let isVisible = true;
-        if (sectionsMap && sectionsMap[secKey] !== undefined) {
-            isVisible = !!sectionsMap[secKey];
-        } else if (type === 'clothing') {
-            isVisible = activeClothingSections.includes(secKey);
-        }
-        const hideClass = `bayan-hide-sec-${secKey}`;
-        if (!isVisible) {
-            document.body.classList.add(hideClass);
-        } else {
-            document.body.classList.remove(hideClass);
-        }
-    });
-
-    // 3. مزامنة checkboxes في قسم الإعدادات
-    document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
-        const sec = chk.getAttribute('data-sec');
-        if (sec) {
-            if (sectionsMap && sectionsMap[sec] !== undefined) {
-                chk.checked = !!sectionsMap[sec];
+        allKnownSections.forEach(secKey => {
+            let isVisible = true;
+            if (sectionsMap && sectionsMap[secKey] !== undefined) {
+                isVisible = !!sectionsMap[secKey];
             } else if (type === 'clothing') {
-                chk.checked = activeClothingSections.includes(sec);
-            } else {
-                chk.checked = true;
+                isVisible = activeClothingSections.includes(secKey);
             }
-        }
-    });
+            const hideClass = `bayan-hide-sec-${secKey}`;
+            if (!isVisible) {
+                document.body.classList.add(hideClass);
+            } else {
+                document.body.classList.remove(hideClass);
+            }
+        });
+    }
 
-    // 4. التحكم في الواجهة الرئيسية المبسطة
+    // 3. التحكم في الواجهة الرئيسية المبسطة
     const simpleDashboard = settings.enableSimpleStaffDashboard !== undefined ? !!settings.enableSimpleStaffDashboard : true;
     if (simpleDashboard) {
         document.body.classList.add('bayan-simple-dashboard-mode');
@@ -264,24 +326,8 @@ function applyBusinessTypeUI() {
         document.body.classList.remove('bayan-simple-dashboard-mode');
     }
 
-    // 5. تحديث كارت نوع النشاط في أعلى يسار شاشة تسجيل الدخول
-    const loginBadgeName = document.getElementById('loginBusinessName');
-    const loginBadgeIcon = document.getElementById('loginBusinessIcon');
-    if (loginBadgeName && loginBadgeIcon) {
-        if (type === 'supermarket') {
-            loginBadgeName.innerText = 'سوبر ماركت ومواد غذائية';
-            loginBadgeIcon.innerText = '🛒';
-            loginBadgeIcon.style.background = 'linear-gradient(135deg, #0284c7, #0369a1)';
-        } else if (type === 'general') {
-            loginBadgeName.innerText = 'تجارة عامة وجملة وتوزيع';
-            loginBadgeIcon.innerText = '📦';
-            loginBadgeIcon.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
-        } else {
-            loginBadgeName.innerText = 'ملابس وأحذية وشنط';
-            loginBadgeIcon.innerText = '👕';
-            loginBadgeIcon.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-        }
-    }
+    // 4. تحديث كارت نوع النشاط في أعلى يسار شاشة تسجيل الدخول
+    updateLoginBadgeUI(type);
 }
 
 function loadSettings() {
@@ -324,9 +370,36 @@ function loadSettings() {
 
     // Load Business Profile Settings
     const bType = settings.businessType || 'clothing';
-    selectBusinessType(bType);
-    if (settings.directToSalesOnLogin !== undefined && document.getElementById('directToSalesOnLogin')) {
-        document.getElementById('directToSalesOnLogin').checked = settings.directToSalesOnLogin;
+    
+    // ضبط واجهة الكروت
+    const hiddenInput = document.getElementById('appBusinessType');
+    if (hiddenInput) hiddenInput.value = bType;
+    document.querySelectorAll('.business-type-card').forEach(card => {
+        card.classList.remove('active');
+        card.style.borderColor = '#e2e8f0';
+        card.style.boxShadow = 'none';
+        const badge = card.querySelector('.btype-check-badge');
+        if (badge) {
+            badge.style.background = '#e2e8f0';
+            badge.style.color = '#94a3b8';
+            badge.innerText = '';
+        }
+    });
+    const activeCard = document.getElementById('btype-card-' + bType);
+    if (activeCard) {
+        activeCard.classList.add('active');
+        activeCard.style.borderColor = '#10b981';
+        activeCard.style.boxShadow = '0 10px 25px rgba(16, 185, 129, 0.15)';
+        const badge = activeCard.querySelector('.btype-check-badge');
+        if (badge) {
+            badge.style.background = '#10b981';
+            badge.style.color = 'white';
+            badge.innerText = '✓';
+        }
+    }
+
+    if (document.getElementById('directToSalesOnLogin')) {
+        document.getElementById('directToSalesOnLogin').checked = settings.directToSalesOnLogin !== undefined ? settings.directToSalesOnLogin : true;
     }
     if (settings.enableVariantsMatrix !== undefined && document.getElementById('enableVariantsMatrix')) {
         document.getElementById('enableVariantsMatrix').checked = settings.enableVariantsMatrix;
@@ -339,15 +412,21 @@ function loadSettings() {
     }
 
     // Load Checkboxes for Dashboard Sections
-    const secMap = settings.visibleDashboardSections;
-    if (secMap && typeof secMap === 'object') {
-        document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
-            const sec = chk.getAttribute('data-sec');
-            if (sec && secMap[sec] !== undefined) {
+    const bTypeSections = settings.businessTypeSections ? settings.businessTypeSections[bType] : null;
+    const secMap = bTypeSections || settings.visibleDashboardSections;
+    const activeClothingSections = ['sales', 'sales-return', 'receipt', 'disbursement', 'daily-report', 'invoices', 'accounts', 'inventory', 'statement'];
+    document.querySelectorAll('.dash-sec-toggle').forEach(chk => {
+        const sec = chk.getAttribute('data-sec');
+        if (sec) {
+            if (secMap && typeof secMap === 'object' && secMap[sec] !== undefined) {
                 chk.checked = !!secMap[sec];
+            } else if (bType === 'clothing') {
+                chk.checked = activeClothingSections.includes(sec);
+            } else {
+                chk.checked = true;
             }
-        });
-    }
+        }
+    });
     applyBusinessTypeUI();
 
     if (typeof updateAllCurrencyLabels === 'function') updateAllCurrencyLabels();

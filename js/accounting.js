@@ -1490,6 +1490,21 @@
                         }
                     }
 
+                    // عكس رصيد تشكيلات المقاسات والألوان إن وُجدت
+                    if (p.variants && Array.isArray(p.variants) && p.variants.length > 0) {
+                        const vMatch = (typeof window.findMatchingVariant === 'function')
+                            ? window.findMatchingVariant(p, item)
+                            : p.variants.find(v => (v.barcode && (item.code === v.barcode || item.barcode === v.barcode)) || ((v.size || '') === (item.size || '') && (v.color || '') === (item.color || '')));
+                        if (vMatch) {
+                            if (item.type && (item.type.includes('مرتجع بيع') || item.type.includes('شراء') || (item.type.includes('تسوية') && item.type.includes('+')))) {
+                                vMatch.stock = Math.max(0, (parseFloat(vMatch.stock) || 0) - baseQty);
+                            } else {
+                                vMatch.stock = (parseFloat(vMatch.stock) || 0) + baseQty;
+                            }
+                        }
+                        p.stock = p.variants.reduce((sum, v) => sum + (parseFloat(v.stock) || 0), 0);
+                    }
+
                 }
 
             });
@@ -1595,6 +1610,21 @@
                                     p.stock = (parseFloat(p.stock) || 0) + baseQty;
                                     p.warehouseStocks[activeWH] = (parseFloat(p.warehouseStocks[activeWH]) || 0) + baseQty;
                                 }
+                            }
+
+                            // عكس رصيد تشكيلات المقاسات والألوان إن وُجدت
+                            if (p.variants && Array.isArray(p.variants) && p.variants.length > 0) {
+                                const vMatch = (typeof window.findMatchingVariant === 'function')
+                                    ? window.findMatchingVariant(p, item)
+                                    : p.variants.find(v => (v.barcode && (item.code === v.barcode || item.barcode === v.barcode)) || ((v.size || '') === (item.size || '') && (v.color || '') === (item.color || '')));
+                                if (vMatch) {
+                                    if (item.type.includes('مرتجع بيع') || item.type.includes('شراء') || (item.type.includes('تسوية') && item.type.includes('+'))) {
+                                        vMatch.stock = Math.max(0, (parseFloat(vMatch.stock) || 0) - baseQty);
+                                    } else {
+                                        vMatch.stock = (parseFloat(vMatch.stock) || 0) + baseQty;
+                                    }
+                                }
+                                p.stock = p.variants.reduce((sum, v) => sum + (parseFloat(v.stock) || 0), 0);
                             }
 
                         }
@@ -6476,6 +6506,10 @@
 
                                 product: item.name,
 
+                                size: item.selectedSize || item.size || '',
+
+                                color: item.selectedColor || item.color || '',
+
                                 qty: item.qty,
 
                                 unit: item.unitName,
@@ -6774,6 +6808,37 @@
         // ================= منطق كشف الحساب (Account Statement) =================
         window.initStatementSection = function() {
             // No need to populate datalist anymore since we use custom dropdown
+            const input = document.getElementById('stmtAccountSelector');
+            if (input && typeof toggleStmtClearBtn === 'function') {
+                toggleStmtClearBtn(input.value);
+            }
+        };
+
+        window.toggleStmtClearBtn = function(val) {
+            const btn = document.getElementById('stmtAccountClearBtn');
+            if (!btn) return;
+            if (val && String(val).trim().length > 0) {
+                btn.style.display = 'flex';
+            } else {
+                btn.style.display = 'none';
+            }
+        };
+
+        window.clearStmtAccountSearch = function() {
+            const input = document.getElementById('stmtAccountSelector');
+            const dropdown = document.getElementById('stmtAccountDropdown');
+            const btn = document.getElementById('stmtAccountClearBtn');
+            if (input) {
+                input.value = '';
+                input.focus();
+            }
+            if (btn) btn.style.display = 'none';
+            if (dropdown) dropdown.style.display = 'none';
+            if (typeof loadSelectedAccountStatement === 'function') {
+                loadSelectedAccountStatement();
+            } else if (typeof generateAccountStatement === 'function') {
+                generateAccountStatement(null);
+            }
         };
 
         window.filterStmtAccounts = function() {
@@ -6782,6 +6847,7 @@
             if (!input || !dropdown) return;
             
             const filter = input.value.trim().toLowerCase();
+            if (typeof toggleStmtClearBtn === 'function') toggleStmtClearBtn(input.value);
             dropdown.innerHTML = '';
             
             if (filter === '' && document.activeElement !== input) {
@@ -6802,6 +6868,7 @@
                     div.onmouseout = () => div.style.background = 'transparent';
                     div.onclick = () => {
                         input.value = acc.name;
+                        if (typeof toggleStmtClearBtn === 'function') toggleStmtClearBtn(acc.name);
                         dropdown.style.display = 'none';
                         window.loadSelectedAccountStatement();
                     };
@@ -6822,6 +6889,7 @@
 
         window.loadSelectedAccountStatement = function() {
             const val = document.getElementById('stmtAccountSelector').value;
+            if (typeof toggleStmtClearBtn === 'function') toggleStmtClearBtn(val);
             if (!val) {
                 generateAccountStatement(null);
                 return;
@@ -6841,16 +6909,18 @@
             if (!targetId) {
                 const selectorInput = document.getElementById('stmtAccountSelector');
                 if (selectorInput && selectorInput.value.trim()) {
-                    const matchedAcc = accounts.find(a => a.name === selectorInput.value.trim());
+                    const matchedAcc = accounts.find(a => a.name && a.name.trim().toLowerCase() === selectorInput.value.trim().toLowerCase());
                     if (matchedAcc) targetId = matchedAcc.id;
                 }
             }
-            if (typeof targetId !== 'number' && typeof targetId !== 'string') {
-                targetId = selectedAccountID;
-            }
 
             if (!targetId) {
-                document.getElementById('statementTableBody').innerHTML = '<tr><td colspan="10" style="text-align:center;">الرجاء اختيار الحساب أولاً لعرض التقرير</td></tr>';
+                const selectorInput = document.getElementById('stmtAccountSelector');
+                if (selectorInput && !selectorInput.value.trim()) {
+                    selectorInput.value = '';
+                }
+                if (typeof toggleStmtClearBtn === 'function') toggleStmtClearBtn(selectorInput ? selectorInput.value : '');
+                document.getElementById('statementTableBody').innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 40px; color: #94a3b8; font-size: 1.1rem; font-weight: bold;">الرجاء اختيار الحساب أولاً لعرض كشف الحساب</td></tr>';
                 document.getElementById('statementDetailsBody').innerHTML = '<tr><td colspan="8" style="padding: 40px; color: #94a3b8; font-size: 1.1rem; text-align: center;">اضغط على إحدى الحركات بالأعلى لعرض تفاصيلها هنا</td></tr>';
                 document.getElementById('stmtFinalBalance').innerText = '0.00';
                 document.getElementById('statementHeaderAccName').style.display = 'none';
@@ -6866,6 +6936,7 @@
             if (!acc) return;
 
             document.getElementById('stmtAccountSelector').value = acc.name;
+            if (typeof toggleStmtClearBtn === 'function') toggleStmtClearBtn(acc.name);
             document.getElementById('statementHeaderAccName').innerText = acc.name;
             document.getElementById('statementHeaderAccName').style.display = 'block';
 

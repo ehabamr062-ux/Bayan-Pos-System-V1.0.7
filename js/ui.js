@@ -821,6 +821,8 @@ data.forEach(store => {
         }
 
         function switchSection(sectionType, fromTab = false, tabId = null) {
+            if (typeof closeAllSearchPopups === 'function') closeAllSearchPopups();
+
             // إذا كان التبويب النشط حالياً هو الحاسبة والتبويب الجديد ليس الحاسبة، نخفي الحاسبة
             if (activeTabId === 'calculator' && sectionType !== 'calculator') {
                 const modal = document.getElementById('royalCalculator');
@@ -1137,7 +1139,12 @@ data.forEach(store => {
                 }
                 if (targetTab.type === 'daily-report') generateDailyReport();
                 if (targetTab.type === 'statement') {
-                    if (typeof loadSelectedAccountStatement === 'function') loadSelectedAccountStatement();
+                    const selVal = document.getElementById('stmtAccountSelector') ? document.getElementById('stmtAccountSelector').value.trim() : '';
+                    if (selVal && typeof loadSelectedAccountStatement === 'function') {
+                        loadSelectedAccountStatement();
+                    } else if (typeof generateAccountStatement === 'function') {
+                        generateAccountStatement(null);
+                    }
                 }
             }, 10);
         }
@@ -1248,6 +1255,12 @@ data.forEach(store => {
                     selectedId: activeItem ? activeItem.id.replace('inquiry-item-', '') : null
                 };
             }
+            if (currentTab.type === 'statement') {
+                tabStates[activeTabId] = {
+                    ...(tabStates[activeTabId] || {}),
+                    accountName: document.getElementById('stmtAccountSelector') ? document.getElementById('stmtAccountSelector').value.trim() : ''
+                };
+            }
 
             // حفظ فلاتر الفترة والتواريخ المخصصة لكل قسم تقارير بشكل مستقل
             const dateFilterConfigs = [
@@ -1279,6 +1292,7 @@ data.forEach(store => {
         }
 
         function restoreTabState(tabId, type) {
+            if (typeof closeAllSearchPopups === 'function') closeAllSearchPopups();
             const state = tabStates[tabId];
 
                         if (type === 'product-inquiry') {
@@ -1480,6 +1494,18 @@ data.forEach(store => {
             }
             if (type === 'price-tracking') {
                 if (typeof initPriceTracking === 'function') initPriceTracking();
+            }
+            if (type === 'statement') {
+                const stmtInput = document.getElementById('stmtAccountSelector');
+                const savedAcc = (state && state.accountName) ? state.accountName : '';
+                if (stmtInput) {
+                    stmtInput.value = savedAcc;
+                }
+                if (savedAcc && typeof loadSelectedAccountStatement === 'function') {
+                    loadSelectedAccountStatement();
+                } else if (typeof generateAccountStatement === 'function') {
+                    generateAccountStatement(null);
+                }
             }
                         if (type === 'product-inquiry') {
                 setTimeout(() => {
@@ -2821,7 +2847,7 @@ data.forEach(store => {
                 renderAccountsTable();
             }
             if (typeof generateAccountStatement === 'function') {
-                generateAccountStatement();
+                generateAccountStatement(accountId);
             }
         };
 
@@ -4226,17 +4252,22 @@ data.forEach(store => {
                     if (wpBar) wpBar.classList.add('hidden');
                     if (infoWidget) infoWidget.classList.add('hidden');
 
-                    const settingsObj = JSON.parse(getStore('pos_settings') || '{}');
-                    const bType = settingsObj.businessType || 'clothing';
-                    const shouldGoSales = (settingsObj.directToSalesOnLogin !== undefined)
-                        ? !!settingsObj.directToSalesOnLogin
-                        : (bType === 'clothing');
+                    // توجيه المستخدم لشاشة البيع إذا كان الخيار مفعلاً ويملك الصلاحية، وإلا للوحة التحكم
+                    const posSettings = JSON.parse(getStore('pos_settings') || '{}');
+                    const directToSales = posSettings.directToSalesOnLogin !== undefined ? !!posSettings.directToSalesOnLogin : true;
 
-                    if (shouldGoSales && typeof switchSection === 'function') {
+                    const canSell = (typeof hasPermission === 'function')
+                        ? hasPermission('docs_add')
+                        : (currentUser.role === 'admin' || (currentUser.permissions && currentUser.permissions.docs && currentUser.permissions.docs.add));
+
+                    if (directToSales && canSell && typeof switchSection === 'function') {
                         switchSection('sales');
                         setTimeout(() => {
-                            const searchEl = document.getElementById('itemSearch') || document.getElementById('salesSearch');
-                            if (searchEl) searchEl.focus();
+                            const searchEl = document.getElementById('productSearch') || document.getElementById('itemSearch') || document.getElementById('salesSearch');
+                            if (searchEl) {
+                                searchEl.focus();
+                                if (typeof searchEl.select === 'function') searchEl.select();
+                            }
                         }, 250);
                     } else if (typeof switchSection === 'function') {
                         switchSection('dashboard');
@@ -4329,17 +4360,22 @@ data.forEach(store => {
             if (wpBar) wpBar.classList.add('hidden');
             if (infoWidget) infoWidget.classList.add('hidden');
 
-            const settingsObjNfc = JSON.parse(getStore('pos_settings') || '{}');
-            const bTypeNfc = settingsObjNfc.businessType || 'clothing';
-            const shouldGoSalesNfc = (settingsObjNfc.directToSalesOnLogin !== undefined)
-                ? !!settingsObjNfc.directToSalesOnLogin
-                : (bTypeNfc === 'clothing');
+            // توجيه المستخدم لشاشة البيع إذا كان الخيار مفعلاً ويملك الصلاحية، وإلا للوحة التحكم
+            const posSettingsNfc = JSON.parse(getStore('pos_settings') || '{}');
+            const directToSalesNfc = posSettingsNfc.directToSalesOnLogin !== undefined ? !!posSettingsNfc.directToSalesOnLogin : true;
 
-            if (shouldGoSalesNfc && typeof switchSection === 'function') {
+            const canSellNfc = (typeof hasPermission === 'function')
+                ? hasPermission('docs_add')
+                : (currentUser.role === 'admin' || (currentUser.permissions && currentUser.permissions.docs && currentUser.permissions.docs.add));
+
+            if (directToSalesNfc && canSellNfc && typeof switchSection === 'function') {
                 switchSection('sales');
                 setTimeout(() => {
-                    const searchEl = document.getElementById('itemSearch') || document.getElementById('salesSearch');
-                    if (searchEl) searchEl.focus();
+                    const searchEl = document.getElementById('productSearch') || document.getElementById('itemSearch') || document.getElementById('salesSearch');
+                    if (searchEl) {
+                        searchEl.focus();
+                        if (typeof searchEl.select === 'function') searchEl.select();
+                    }
                 }, 250);
             } else if (typeof switchSection === 'function') {
                 switchSection('dashboard');
@@ -4926,7 +4962,7 @@ data.forEach(store => {
     });
 
         window.selectSetupBusinessType = function(type) {
-            const types = ['clothing', 'supermarket', 'general'];
+            const types = ['clothing', 'supermarket'];
             types.forEach(t => {
                 const card = document.getElementById(`setupBiz_${t}`);
                 const radio = card ? card.querySelector('input[type="radio"]') : null;
@@ -5016,8 +5052,7 @@ data.forEach(store => {
                 // تعبئة بيانات كارت النجاح
                 const bizNames = {
                     clothing: 'ملابس وأحذية وشنط 👕',
-                    supermarket: 'سوبر ماركت ومواد غذائية 🛒',
-                    general: 'تجارة عامة وجملة وتوزيع 📦'
+                    supermarket: 'سوبر ماركت ومواد غذائية 🛒'
                 };
                 document.getElementById('displayAdminName').innerText = name;
                 document.getElementById('displayAdminPin').innerText = pin;
@@ -5089,7 +5124,25 @@ data.forEach(store => {
             if (wpBar) wpBar.classList.add('hidden');
             if (infoWidget) infoWidget.classList.add('hidden');
 
-            switchSection('dashboard');
+            const posSettingsSetup = JSON.parse(getStore('pos_settings') || '{}');
+            const directToSalesSetup = posSettingsSetup.directToSalesOnLogin !== undefined ? !!posSettingsSetup.directToSalesOnLogin : true;
+
+            const canSellSetup = (typeof hasPermission === 'function')
+                ? hasPermission('docs_add')
+                : (currentUser && (currentUser.role === 'admin' || (currentUser.permissions && currentUser.permissions.docs && currentUser.permissions.docs.add)));
+
+            if (directToSalesSetup && canSellSetup && typeof switchSection === 'function') {
+                switchSection('sales');
+                setTimeout(() => {
+                    const searchEl = document.getElementById('productSearch') || document.getElementById('itemSearch') || document.getElementById('salesSearch');
+                    if (searchEl) {
+                        searchEl.focus();
+                        if (typeof searchEl.select === 'function') searchEl.select();
+                    }
+                }, 250);
+            } else if (typeof switchSection === 'function') {
+                switchSection('dashboard');
+            }
             updateNotifications();
         };
 

@@ -1900,7 +1900,14 @@ function handleAdjSearch(query) {
                         return `
                             <div class="pos-search-row" onclick="
                                 document.getElementById('adjSearchResults').style.display='none';
-                                if (typeof showUnitSelectionModal === 'function' && ${p.units && p.units.length > 1}) {
+                                const selProd = productsDB.find(x => x.id === ${p.id});
+                                if (selProd && selProd.variants && selProd.variants.length > 0) {
+                                    if (typeof showVariantSelectionModal === 'function') {
+                                        showVariantSelectionModal(selProd, 'adj');
+                                    } else {
+                                        fillAdjustmentHeaderWithUnit(selProd, ${JSON.stringify((p.units && p.units.length > 0) ? p.units[0] : { unitName: p.unit || 'قطعة', factor: 1, cost: p.cost }).replace(/"/g, '&quot;')});
+                                    }
+                                } else if (typeof showUnitSelectionModal === 'function' && ${p.units && p.units.length > 1}) {
                                     showUnitSelectionModal(productsDB.find(x => x.id === ${p.id}), 'adjustment');
                                 } else {
                                     fillAdjustmentHeaderWithUnit(productsDB.find(x => x.id === ${p.id}), ${JSON.stringify((p.units && p.units.length > 0) ? p.units[0] : { unitName: p.unit || 'قطعة', factor: 1, cost: p.cost }).replace(/"/g, '&quot;')});
@@ -2109,6 +2116,25 @@ async function saveAdjustment() {
             p.stock = (parseFloat(p.stock) || 0) + newBaseStock;
             if (!p.warehouseStocks) p.warehouseStocks = {};
             p.warehouseStocks[activeWH] = (parseFloat(p.warehouseStocks[activeWH]) || 0) + newBaseStock;
+
+            // تحديث رصيد المقاس واللون للتشكيلة المختارة في التسوية
+            if (p.variants && Array.isArray(p.variants) && p.variants.length > 0) {
+                const vMatch = (typeof window.findMatchingVariant === 'function')
+                    ? window.findMatchingVariant(p, item)
+                    : p.variants.find(v => 
+                        (item.selectedVariant && v.barcode && v.barcode === item.selectedVariant.barcode) ||
+                        ((v.size || '') === (item.selectedSize || item.size || '') && (v.color || '') === (item.selectedColor || item.color || ''))
+                    );
+                if (vMatch) {
+                    vMatch.stock = Math.max(0, (parseFloat(vMatch.stock) || 0) + newBaseStock);
+                } else if (p.variants.length === 1) {
+                    p.variants[0].stock = Math.max(0, (parseFloat(p.variants[0].stock) || 0) + newBaseStock);
+                } else if (p.variants.length > 1) {
+                    p.variants[0].stock = Math.max(0, (parseFloat(p.variants[0].stock) || 0) + newBaseStock);
+                }
+                // مزامنة رصيد الصنف الإجمالي دائماً من مجموع الـ Variants
+                p.stock = p.variants.reduce((sum, v) => sum + (parseFloat(v.stock) || 0), 0);
+            }
 
             const lineTotal = (parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0);
             grandTotal += lineTotal;
@@ -2435,11 +2461,16 @@ function fillProductModal(p) {
     if (vBody) {
         vBody.innerHTML = '';
         if (p.variants && Array.isArray(p.variants) && p.variants.length > 0) {
+            const isColorsOnly = p.variants.every(v => !v.size || v.size.trim() === '');
+            setVariantMode(isColorsOnly ? 'colors' : 'sizes');
             p.variants.forEach(v => {
-                addVariantRow(v.size, v.color, v.barcode, v.stock, v.price, v.wholesale, v.cost);
+                addVariantRow(v.size || '', v.color || '', v.barcode, v.stock, v.price, v.wholesale, v.cost);
             });
+        } else {
+            setVariantMode('colors');
         }
         updateVariantsCountBadge();
+        calculateTotalVariantsStock();
     }
 
     if (typeof calculateUnitPrices === 'function') calculateUnitPrices();
@@ -2447,8 +2478,136 @@ function fillProductModal(p) {
 }
 
 // =========================================================================
-// 👕 دوال إدارة المقاسات والألوان وتوليد الباركودات الذكي (Variant Matrix Logic)
+// 👕 دوال إدارة المقاسات والألوان وتوليد الباركودات الذكي (Variant Matrix & Bag Colors Logic)
 // =========================================================================
+
+window._currentVariantMode = 'colors';
+
+function setVariantMode(mode) {
+    window._currentVariantMode = mode;
+    const btnColors = document.getElementById('btn-vmode-colors');
+    const btnSizes = document.getElementById('btn-vmode-sizes');
+    const panelColors = document.getElementById('variantColorsOnlyPanel');
+    const panelSizes = document.getElementById('variantSizesColorsPanel');
+    const sizeTh = document.querySelectorAll('#productVariantsTable .col-var-size');
+    const sizeTds = document.querySelectorAll('#productVariantsTableBody .col-var-size-td');
+
+    if (mode === 'colors') {
+        if (btnColors) {
+            btnColors.style.background = '#7c3aed';
+            btnColors.style.color = 'white';
+            btnColors.style.border = 'none';
+            btnColors.style.boxShadow = '0 2px 6px rgba(124,58,237,0.3)';
+        }
+        if (btnSizes) {
+            btnSizes.style.background = 'white';
+            btnSizes.style.color = '#475569';
+            btnSizes.style.border = '1.5px solid #cbd5e1';
+            btnSizes.style.boxShadow = 'none';
+        }
+        if (panelColors) panelColors.classList.remove('hidden');
+        if (panelSizes) panelSizes.classList.add('hidden');
+        sizeTh.forEach(th => th.style.display = 'none');
+        sizeTds.forEach(td => td.style.display = 'none');
+    } else {
+        if (btnSizes) {
+            btnSizes.style.background = '#7c3aed';
+            btnSizes.style.color = 'white';
+            btnSizes.style.border = 'none';
+            btnSizes.style.boxShadow = '0 2px 6px rgba(124,58,237,0.3)';
+        }
+        if (btnColors) {
+            btnColors.style.background = 'white';
+            btnColors.style.color = '#475569';
+            btnColors.style.border = '1.5px solid #cbd5e1';
+            btnColors.style.boxShadow = 'none';
+        }
+        if (panelSizes) panelSizes.classList.remove('hidden');
+        if (panelColors) panelColors.classList.add('hidden');
+        sizeTh.forEach(th => th.style.display = '');
+        sizeTds.forEach(td => td.style.display = '');
+    }
+}
+window.setVariantMode = setVariantMode;
+
+function setQuickColorInput(colorName) {
+    const nameInput = document.getElementById('colorOnlyNameInput');
+    const qtyInput = document.getElementById('colorOnlyQtyInput');
+    if (nameInput) nameInput.value = colorName;
+    if (qtyInput) {
+        qtyInput.focus();
+        qtyInput.select();
+    }
+}
+window.setQuickColorInput = setQuickColorInput;
+
+function addColorOnlyVariant() {
+    const nameInput = document.getElementById('colorOnlyNameInput');
+    const qtyInput = document.getElementById('colorOnlyQtyInput');
+    const colorName = nameInput ? nameInput.value.trim() : '';
+    const qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : 1;
+
+    if (!colorName) {
+        return showToast("⚠️ يرجى إدخال اسم اللون أولاً (مثال: أسود، بني، هافان)", "warning");
+    }
+
+    // التحقق من تكرار اللون
+    const existingRows = document.querySelectorAll('#productVariantsTableBody tr');
+    for (let tr of existingRows) {
+        const cVal = tr.querySelector('.var-color-input')?.value?.trim();
+        if (cVal && cVal.toLowerCase() === colorName.toLowerCase()) {
+            showToast(`⚠️ تنبيه: اللون (${colorName}) مضاف مسبقاً في الجدول! يمكنك تعديل رصيده مباشرة`, "info");
+            const stockInp = tr.querySelector('.var-stock-input');
+            if (stockInp) {
+                stockInp.focus();
+                stockInp.select();
+            }
+            return;
+        }
+    }
+
+    const curPrice = parseFloat(document.getElementById('newItemPrice')?.value) || 0;
+    const curWs = parseFloat(document.getElementById('newItemWholesale')?.value) || 0;
+    const curCost = parseFloat(document.getElementById('newItemCost')?.value) || 0;
+
+    addVariantRow('', colorName, '', qty, curPrice, curWs, curCost);
+    calculateTotalVariantsStock();
+
+    if (nameInput) {
+        nameInput.value = '';
+        nameInput.focus();
+    }
+    if (qtyInput) {
+        qtyInput.value = 1;
+    }
+
+    showToast(`✅ تم إضافة لون (${colorName}) برصيد (${qty}) بنجاح`, "success");
+}
+window.addColorOnlyVariant = addColorOnlyVariant;
+
+function calculateTotalVariantsStock() {
+    const vRows = document.getElementById('productVariantsTableBody')?.rows || [];
+    if (vRows.length === 0) return;
+
+    let totalStock = 0;
+    for (let i = 0; i < vRows.length; i++) {
+        const stockInp = vRows[i].querySelector('.var-stock-input');
+        if (stockInp) {
+            totalStock += parseFloat(stockInp.value) || 0;
+        }
+    }
+
+    const stockField = document.getElementById('newItemStock');
+    if (stockField) {
+        stockField.value = totalStock;
+    }
+    const costQtyField = document.getElementById('newItemCostQty');
+    if (costQtyField) {
+        const costVal = parseFloat(document.getElementById('newItemCost')?.value) || 0;
+        costQtyField.value = (totalStock * costVal).toFixed(2);
+    }
+}
+window.calculateTotalVariantsStock = calculateTotalVariantsStock;
 
 function applyPresetSizes(presetType) {
     const input = document.getElementById('variantSizesInput');
@@ -2478,10 +2637,13 @@ function addVariantRow(size = '', color = '', barcode = '', stock = 0, price = n
     const defaultCost = cost !== null ? cost : (parseFloat(document.getElementById('newItemCost')?.value) || 0);
     const autoBarcode = barcode || generateVariantBarcode(size, color, rowIdx);
 
+    const isColorsMode = (window._currentVariantMode === 'colors') || (!size && !!color);
+    const sizeDisplay = isColorsMode ? 'display: none;' : '';
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
         <td style="font-weight: bold; color: #64748b;">${rowIdx}</td>
-        <td>
+        <td class="col-var-size-td" style="${sizeDisplay}">
             <input type="text" class="search-input var-size-input" value="${size}" placeholder="مثال: XL"
                 style="height: 32px; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; border-radius: 6px;">
         </td>
@@ -2498,8 +2660,8 @@ function addVariantRow(size = '', color = '', barcode = '', stock = 0, price = n
             </div>
         </td>
         <td>
-            <input type="number" class="search-input var-stock-input" value="${stock}" min="0"
-                style="height: 32px; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; border-radius: 6px;">
+            <input type="number" class="search-input var-stock-input" value="${stock}" min="0" oninput="calculateTotalVariantsStock()"
+                style="height: 32px; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; border-radius: 6px; color: #047857;">
         </td>
         <td>
             <input type="number" class="search-input var-price-input" value="${defaultPrice}"
@@ -2514,7 +2676,7 @@ function addVariantRow(size = '', color = '', barcode = '', stock = 0, price = n
                 style="height: 32px; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; border-radius: 6px; color: #d97706;">
         </td>
         <td>
-            <button type="button" onclick="this.closest('tr').remove(); updateVariantsCountBadge();"
+            <button type="button" onclick="this.closest('tr').remove(); updateVariantsCountBadge(); calculateTotalVariantsStock();"
                 style="background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-weight: bold;">✕</button>
         </td>
     `;
@@ -2541,7 +2703,7 @@ function generateVariantsMatrix() {
     const curWs = parseFloat(document.getElementById('newItemWholesale')?.value) || 0;
     const curCost = parseFloat(document.getElementById('newItemCost')?.value) || 0;
 
-    const listSizes = sizes.length > 0 ? sizes : ['قياسي'];
+    const listSizes = sizes.length > 0 ? sizes : [''];
     const listColors = colors.length > 0 ? colors : ['موحد'];
 
     listSizes.forEach(sz => {
@@ -2550,12 +2712,13 @@ function generateVariantsMatrix() {
         });
     });
 
+    calculateTotalVariantsStock();
     showToast(`✅ تم توليد (${listSizes.length * listColors.length}) تشكيلة بنجاح!`, "success");
 }
 
 function generateAllVariantBarcodes() {
     const rows = document.getElementById('productVariantsTableBody')?.rows || [];
-    if (rows.length === 0) return showToast("⚠️ لا توجد مقاسات مسجلة لتوليد الباركود لها", "info");
+    if (rows.length === 0) return showToast("⚠️ لا توجد مقاسات أو ألوان مسجلة لتوليد الباركود لها", "info");
 
     for (let i = 0; i < rows.length; i++) {
         const barcodeInp = rows[i].querySelector('.var-barcode-input');
@@ -2569,23 +2732,23 @@ function generateAllVariantBarcodes() {
 }
 
 // =========================================================================
-// 🏷️ طباعة تيكتات وملصقات الملابس والأحذية (Clothing Hangtags & Labels)
+// 🏷️ طباعة تيكتات وملصقات الشنط والملابس والأحذية (Hangtags & Labels)
 // =========================================================================
 
 function printProductVariantHangtags() {
     const rows = document.getElementById('productVariantsTableBody')?.rows || [];
-    const productName = document.getElementById('newItemName')?.value || 'موديل ملابس';
-    const shopName = (document.getElementById('shopName') ? document.getElementById('shopName').value : '') || 'بيان فاشون';
+    const productName = document.getElementById('newItemName')?.value || 'موديل الصنف';
+    const shopName = (document.getElementById('shopName') ? document.getElementById('shopName').value : '') || 'المتجر الذكي';
     const currency = typeof getCurrencySymbol === 'function' ? getCurrencySymbol() : 'ج.م';
 
     if (rows.length === 0) {
-        return showToast("⚠️ لا توجد مقاسات مسجلة لطباعة تيكتات لها!", "warning");
+        return showToast("⚠️ لا توجد تشكيلات أو ألوان مسجلة لطباعة تيكتات لها!", "warning");
     }
 
     const targets = [];
     for (let i = 0; i < rows.length; i++) {
-        const size = rows[i].querySelector('.var-size-input')?.value || 'قياسي';
-        const color = rows[i].querySelector('.var-color-input')?.value || 'موحد';
+        const size = rows[i].querySelector('.var-size-input')?.value?.trim() || '';
+        const color = rows[i].querySelector('.var-color-input')?.value?.trim() || 'موحد';
         let barcode = rows[i].querySelector('.var-barcode-input')?.value || '';
         if (!barcode) {
             barcode = generateVariantBarcode(size, color, i + 1);
@@ -2604,13 +2767,14 @@ function printProductVariantHangtags() {
         });
     }
 
+    const isColorsOnly = targets.every(t => !t.size || t.size === 'قياسي' || t.size.trim() === '');
     const bSettings = (typeof getBarcodeLabelSettings === 'function') ? getBarcodeLabelSettings() : { width: 50, height: 35, offsetX: 0, barcodeHeight: 28 };
     const printWindow = window.open('', '_blank', 'width=800,height=600');
 
     printWindow.document.write(`
         <html>
         <head>
-            <title>طباعة تيكتات الملابس - ${productName}</title>
+            <title>طباعة تيكتات الأصناف - ${productName}</title>
             <style>
                 @page {
                     size: ${bSettings.width || 50}mm ${bSettings.height || 35}mm;
@@ -2668,13 +2832,15 @@ function printProductVariantHangtags() {
             svgIndex++;
             const label = printWindow.document.createElement('div');
             label.className = 'hangtag-label';
+            
+            const badgeHtml = (!t.size || t.size === 'قياسي' || t.size.trim() === '')
+                ? `<div style="text-align: center; width: 100%;"><span class="color-badge" style="font-size: 8.5pt; font-weight: 900; background: #0f172a; color: white; padding: 0.5mm 3.5mm; border-radius: 4px;">اللون: ${t.color}</span></div>`
+                : `<div class="variant-badge-row"><span class="size-badge">SIZE: ${t.size}</span><span class="color-badge">اللون: ${t.color}</span></div>`;
+
             label.innerHTML = `
                 <div class="shop-name">${shopName}</div>
                 <div class="model-name">${t.name}</div>
-                <div class="variant-badge-row">
-                    <span class="size-badge">SIZE: ${t.size}</span>
-                    <span class="color-badge">اللون: ${t.color}</span>
-                </div>
+                ${badgeHtml}
                 <svg id="ht-svg-${svgIndex}"></svg>
                 <div class="price-badge">${t.price.toFixed(2)} ${currency}</div>
             `;

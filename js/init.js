@@ -16,6 +16,14 @@ loadData().then(async () => {
     if (currentUser) {
         console.log(`👤 أهلاً بك مجدداً: ${currentUser.name}`);
         if (typeof updateNotifications === 'function') updateNotifications();
+        const posSettings = JSON.parse(getStore('pos_settings') || '{}');
+        const directToSales = posSettings.directToSalesOnLogin !== undefined ? !!posSettings.directToSalesOnLogin : true;
+        const canSell = (typeof hasPermission === 'function')
+            ? hasPermission('docs_add')
+            : (currentUser.role === 'admin' || (currentUser.permissions && currentUser.permissions.docs && currentUser.permissions.docs.add));
+        if (directToSales && canSell && typeof switchSection === 'function') {
+            switchSection('sales');
+        }
     } else {
         if (typeof initLogin === 'function') initLogin();
     }

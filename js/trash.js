@@ -160,6 +160,21 @@ const trashManager = {
                                     p.warehouseStocks[activeWH] = Math.max(0, (parseFloat(p.warehouseStocks[activeWH]) || 0) - baseQty);
                                 }
                             }
+
+                            // استعادة رصيد التشكيلات إن وُجدت
+                            if (p.variants && Array.isArray(p.variants) && p.variants.length > 0) {
+                                const vMatch = (typeof window.findMatchingVariant === 'function')
+                                    ? window.findMatchingVariant(p, t)
+                                    : p.variants.find(v => (v.barcode && (t.code === v.barcode || t.barcode === v.barcode)) || ((v.size || '') === (t.size || '') && (v.color || '') === (t.color || '')));
+                                if (vMatch) {
+                                    if (tType.includes('مرتجع بيع') || tType.includes('شراء') || (tType.includes('تسوية') && tType.includes('+'))) {
+                                        vMatch.stock = (parseFloat(vMatch.stock) || 0) + baseQty;
+                                    } else {
+                                        vMatch.stock = Math.max(0, (parseFloat(vMatch.stock) || 0) - baseQty);
+                                    }
+                                }
+                                p.stock = p.variants.reduce((sum, v) => sum + (parseFloat(v.stock) || 0), 0);
+                            }
                         }
                     }
                 }

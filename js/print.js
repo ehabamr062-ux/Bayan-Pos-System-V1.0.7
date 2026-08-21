@@ -160,6 +160,21 @@ function printInvoice(invoiceData) {
         }
     }
 
+    // تنسيق اسم الصنف مع المقاس واللون إن وُجد
+    const formatItemPrintName = (item) => {
+        let name = item.name || '';
+        const sz = item.selectedSize || item.size || '';
+        const col = item.selectedColor || item.color || '';
+        if (sz && col) {
+            if (!name.includes(sz) && !name.includes(col)) name += ` (${sz} - ${col})`;
+        } else if (col) {
+            if (!name.includes(col)) name += ` (${col})`;
+        } else if (sz) {
+            if (!name.includes(sz)) name += ` (${sz})`;
+        }
+        return escapePrintHtml(name);
+    };
+
     // صفوف الأصناف - النسخة الكاملة (مع السعر والإجمالي)
     const itemsRowsFull = items.map(item => {
         const qty       = parseFloat(item.qty   || 0);
@@ -169,7 +184,7 @@ function printInvoice(invoiceData) {
             ? (typeof item.selectedUnit === 'object' ? item.selectedUnit.unitName : item.selectedUnit)
             : (item.unit || 'قطعة');
         return `<tr>
-            <td style="text-align:right; padding:3px 5px; border:1px solid #000;">${escapePrintHtml(item.name)}</td>
+            <td style="text-align:right; padding:3px 5px; border:1px solid #000;">${formatItemPrintName(item)}</td>
             <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${qty} ${escapePrintHtml(unitName)}</td>
             <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${price.toFixed(2)}</td>
             <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${lineTotal}</td>
@@ -185,7 +200,7 @@ function printInvoice(invoiceData) {
             ? (typeof item.selectedUnit === 'object' ? item.selectedUnit.unitName : item.selectedUnit)
             : (item.unit || 'قطعة');
         return `<tr>
-            <td style="text-align:right; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${escapePrintHtml(item.name)}</td>
+            <td style="text-align:right; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${formatItemPrintName(item)}</td>
             <td style="text-align:center; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${qty} ${escapePrintHtml(unitName)}</td>
             <td style="text-align:center; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${lineTotal}</td>
         </tr>`;

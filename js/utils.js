@@ -68,7 +68,7 @@
                 setTimeout(() => {
                     showCustomAlert({
                         titleText: '✅ نظامك محدث',
-                        msg: 'أنت تستخدم حالياً أحدث إصدار مستقر من بَيَان POS (v2.0.0).',
+                        msg: 'أنت تستخدم حالياً أحدث إصدار مستقر من بَيَان POS (v2.0.1).',
                         type: 'success'
                     });
                 }, 1000);
@@ -659,16 +659,18 @@
                 const found = methods.find(m => m.name && m.name.toLowerCase().trim() === mStr);
                 if (found) {
                     if (found.type === 'credit') return true;
-                    if (found.type === 'cash' || found.type === 'bank') return false;
+                    if (found.type === 'cash' || found.type === 'bank') {
+                        if (deferred <= 0.001) return false;
+                    }
                 }
             }
 
-            // 3. إذا كانت الطريقة نقدي أو كاش أو شبكة أو بنك -> ليست آجلة أبداً
+            // 3. إذا كانت الطريقة نقدي أو كاش أو شبكة أو بنك -> ليست آجلة
             if (mStr.includes('نقدي') || mStr.includes('كاش') || mStr.includes('cash') || mStr.includes('تحويل') || mStr.includes('فيزا') || mStr.includes('شبكة') || mStr.includes('بنك') || mStr.includes('bank') || mStr.includes('مدى') || mStr.includes('stc') || mStr.includes('فودافون') || mStr.includes('انستا')) {
-                return false;
+                if (deferred <= 0.001) return false;
             }
             
-            // 4. في حالة وجود متبقي حقيقي وتم تسجيل مدفوع جزئي (معاملة مختلطة غير نقدية بالكامل)
+            // 4. في حالة وجود متبقي حقيقي صريح
             if (deferred > 0.001) return true;
             if (total > 0 && paid > 0 && (total - paid) > 0.001) return true;
 
@@ -678,7 +680,12 @@
         window.ensurePartnerAccountExists = async function(partnerName, partnerType /* 'عميل' | 'مورد' */, isCredit, onApproved) {
             const isCash = window.isGenericCashPartner(partnerName);
             
-            // 1. إذا كانت المعاملة آجلة والاسم نقدي أو فارغ -> نمنع الحفظ نهائياً
+            // 1. إذا كانت المعاملة نقدية (كاش) -> نسمح فوراً بالحفظ دائماً (اسم العميل/المورد اختياري)
+            if (!isCredit) {
+                return true;
+            }
+
+            // 2. إذا كانت المعاملة آجلة والاسم نقدي أو فارغ -> نمنع الحفظ نهائياً لأن الآجل يتطلب حساباً مسجلاً
             if (isCredit && isCash) {
                 showCustomAlert({
                     type: 'error',
@@ -688,11 +695,6 @@
                 return false;
             }
             
-            // 2. إذا كانت المعاملة نقدية (كاش) -> نسمح فوراً بالحفظ سواء كان الحساب نقدي عام أو اسم عميل اختياري
-            if (!isCredit) {
-                return true;
-            }
-            
             // 3. إذا كانت المعاملة آجلة، نتحقق هل الاسم مسجل في الحسابات أم لا
             const cleanArabic = (str) => (str || '').trim().toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/[ىي]/g, 'ي').replace(/\s+/g, ' ');
             const partnerClean = cleanArabic(partnerName);
@@ -700,7 +702,7 @@
             const existingAcc = (typeof accounts !== 'undefined' ? accounts : []).find(a => cleanArabic(a.name) === partnerClean);
             
             if (existingAcc) {
-                return true; // موجود بالفعل -> تستمر العملية الأصلية بدون أي كولباك متكرر
+                return true; // موجود بالفعل -> تستمر العملية الأصلية
             }
             
             // 4. الاسم غير مسجل في الحسابات -> نطلب من المستخدم إضافة سريعة وتسجيله في الحسابات فوراً
@@ -743,7 +745,6 @@
                     if (typeof onApproved === 'function') onApproved(newAcc);
                 }
             });
-            
             return false;
         };
 
@@ -756,11 +757,11 @@
             const grandDebtElem = document.getElementById('grandDebtDisplay');
             const prevBal = parseFloat(document.getElementById('prevBalanceDisplay')?.innerText) || 0;
 
-            const isCredit = window.isTransactionCredit(method, currentTotal, tendered, currentTotal - tendered);
+            const isCredit = window.isTransactionCredit(method, (typeof currentTotal !== 'undefined' ? currentTotal : 0), tendered, (typeof currentTotal !== 'undefined' ? currentTotal : 0) - tendered);
 
             if (isCredit) {
                 // في حالة البيع الآجل: العميل يدفع جزءاً من الفاتورة أو لا يدفع
-                const remainingOnInvoice = Math.max(0, currentTotal - tendered);
+                const remainingOnInvoice = Math.max(0, (typeof currentTotal !== 'undefined' ? currentTotal : 0) - tendered);
                 if (changeElem) changeElem.innerText = '0.00 (آجل)';
 
                 // المديونية الكلية المتراكمة = المديونية السابقة + المتبقي غير المدفوع من الفاتورة الحالية
@@ -768,13 +769,14 @@
                 if (grandDebtElem) grandDebtElem.innerText = grandTotalDebt.toFixed(2);
             } else {
                 // في حالة البيع النقدي أو البنكي:
-                const change = Math.max(0, tendered - currentTotal);
+                const change = Math.max(0, tendered - (typeof currentTotal !== 'undefined' ? currentTotal : 0));
                 if (changeElem) changeElem.innerText = change.toFixed(2);
 
                 // في الكاش لا تضاف مديونية جديدة من هذه الفاتورة
                 if (grandDebtElem) grandDebtElem.innerText = prevBal.toFixed(2);
             }
         }
+        window.calculateChange = calculateChange;
 
         function createBtn(container, value) {
             const btn = document.createElement('button');
@@ -850,6 +852,19 @@
                         if (paidBox) paidBox.style.display = 'none';
                         if (remainingBox) remainingBox.style.display = 'none';
                         if (btnContainer) btnContainer.style.display = 'none';
+
+                        // إعادة تعيين المدفوع إلى فارغ أو إجمالي الفاتورة لضمان سداد كاش 100%
+                        if (tenderedInput) {
+                            tenderedInput.value = '';
+                        }
+                        const custInput = document.getElementById('customerName');
+                        if (custInput) {
+                            custInput.style.backgroundColor = '';
+                            custInput.style.border = '';
+                            custInput.style.boxShadow = '';
+                        }
+                        if (typeof calculateTotals === 'function') calculateTotals();
+                        if (typeof calculateChange === 'function') calculateChange();
                     }
                 }
                 // قسم الشراء

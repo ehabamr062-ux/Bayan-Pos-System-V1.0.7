@@ -143,20 +143,16 @@ body.dark-mode ::-webkit-scrollbar-thumb:active {
 }
 
 .pos-search-row {
-    display: grid;
-    grid-template-columns: 120px 1fr 90px 90px 90px 80px;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    border-bottom: 1px solid #f1f5f9;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: background 0.15s ease, transform 0.15s ease;
+    transition: background 0.12s ease;
+}
+
+tr.pos-search-row {
+    display: table-row !important;
 }
 
 .pos-search-row:hover {
-    background: #f1f5f9;
-    transform: translateX(-2px);
+    background: #f8fafc;
+    transform: none !important;
 }
 
 .pos-search-close-btn {
@@ -178,6 +174,34 @@ body.dark-mode ::-webkit-scrollbar-thumb:active {
 .pos-search-close-btn:hover {
     background: #fca5a5;
     color: #991b1b;
+}
+
+body.dark-mode .pos-search-panel {
+    background: #1e293b !important;
+    border-color: #334155 !important;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.6) !important;
+}
+
+body.dark-mode .pos-search-panel thead tr {
+    background: #0f172a !important;
+    color: #94a3b8 !important;
+    border-bottom-color: #334155 !important;
+}
+
+body.dark-mode .pos-search-panel tbody tr.pos-search-row {
+    border-bottom-color: #334155 !important;
+}
+
+body.dark-mode .pos-search-panel tbody tr.pos-search-row td {
+    color: #f1f5f9 !important;
+}
+
+body.dark-mode .pos-search-panel tbody tr.pos-search-row:hover {
+    background: #334155 !important;
+}
+
+body.dark-mode .pos-search-panel tbody tr.active-search-row {
+    background: #1e3a8a !important;
 }
 
 /* --- Corner Intersection (where H and V scrollbars meet) --- */
