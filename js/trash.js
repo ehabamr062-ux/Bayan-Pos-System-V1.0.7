@@ -159,6 +159,12 @@ const trashManager = {
                                     p.stock = Math.max(0, (parseFloat(p.stock) || 0) - baseQty);
                                     p.warehouseStocks[activeWH] = Math.max(0, (parseFloat(p.warehouseStocks[activeWH]) || 0) - baseQty);
                                 }
+                            } else if (tType.includes('تحويل')) {
+                                const parts = (t.partner || '').split(' -> ');
+                                const wFrom = t.sourceWarehouse || (parts.length === 2 ? parts[0].trim() : null);
+                                const wTo = t.warehouse || (parts.length === 2 ? parts[1].trim() : null);
+                                if (wFrom) p.warehouseStocks[wFrom] = Math.max(0, (parseFloat(p.warehouseStocks[wFrom]) || 0) - baseQty);
+                                if (wTo) p.warehouseStocks[wTo] = (parseFloat(p.warehouseStocks[wTo]) || 0) + baseQty;
                             }
 
                             // استعادة رصيد التشكيلات إن وُجدت

@@ -68,7 +68,7 @@
                 setTimeout(() => {
                     showCustomAlert({
                         titleText: '✅ نظامك محدث',
-                        msg: 'أنت تستخدم حالياً أحدث إصدار مستقر من بَيَان POS (v2.0.1).',
+                        msg: 'أنت تستخدم حالياً أحدث إصدار مستقر من بَيَان POS (v2.0.2).',
                         type: 'success'
                     });
                 }, 1000);
@@ -594,8 +594,9 @@
         }
 
         // ================= منطق المشتريات (Purchase Logic) =================
-        let purchaseCart = [];
-        let purchaseTotalVal = 0;
+        window.purchaseCart = window.purchaseCart || [];
+        var purchaseCart = window.purchaseCart;
+        var purchaseTotalVal = window.purchaseTotalVal || 0;
 
         function exportToExcel() {
             if (!transactions || transactions.length === 0) return alert("❌ لا توجد بيانات للتصدير");
@@ -4352,8 +4353,13 @@ try {
 
             // 2. إذا كانت كافة البيانات محفوظة ولا توجد أصناف معلقة، نقوم بالنسخ الاحتياطي ثم الخروج
             const settings = JSON.parse(getStore('pos_settings') || '{}');
-            if (settings.autoBackup !== false) { // مفعل تلقائياً كخيار أمان أقصى
-                await window.executeAutoBackupToFile(false);
+            if (settings.autoBackup) {
+                try {
+                    window.showBackupProgressOverlay();
+                    await window.executeAutoBackupToFile(false);
+                } catch (err) {
+                    console.error("Auto-backup before quit failed:", err);
+                }
             }
 
             // إكمال عملية الخروج بأمان بعد إنهاء النسخ الاحتياطي

@@ -122,7 +122,9 @@ function getInvSummaryMap(currentWH) {
         } else if (type.includes('مرتجع شراء')) {
             change = -qty; s.out += qty;
         } else if (type.includes('تسوية')) {
-            change = type.includes('+') ? qty : -qty;
+            if (type.includes('+')) change = Math.abs(qty);
+            else if (type.includes('-')) change = -Math.abs(qty);
+            else change = qty;
         }
 
         if (!type.includes('تحويل')) s.globalChange += change;
@@ -170,16 +172,11 @@ function renderInventoryTable() {
 
     productsDB.forEach((p, idx) => {
         const s = summary[p.name] || { in: 0, out: 0, lastPur: 0, totalCost: 0, totalQty: 0, wStock: 0, globalChange: 0 };
-        const initialBal = (parseFloat(p.stock) || 0) - s.globalChange;
 
-        const isMainWH = (currentWH === 'المخزن الرئيسي' || (typeof warehouses !== 'undefined' && warehouses.length === 1) || (typeof warehouses !== 'undefined' && warehouses[0] && warehouses[0].name.trim() === currentWH));
-        
-        let baseWHStock = isMainWH ? initialBal : 0;
-        if (!isMainWH && p.warehouseStocks && p.warehouseStocks[currentWH] !== undefined) {
-            baseWHStock = parseFloat(p.warehouseStocks[currentWH]) || 0;
-        }
+        let currentStock = (typeof getWarehouseStock === 'function')
+            ? getWarehouseStock(p.name, currentWH)
+            : (parseFloat(p.stock) || 0);
 
-        const currentStock = isMainWH ? (initialBal + s.wStock) : (baseWHStock + s.wStock);
         const avgCost = s.totalQty > 0 ? (s.totalCost / s.totalQty) : (parseFloat(p.cost) || 0);
         const retail = parseFloat(p.price) || 0;
         const profitMargin = retail > 0 ? (((retail - avgCost) / retail) * 100).toFixed(1) : 0;
@@ -1172,8 +1169,46 @@ window.invalidateStockCache = invalidateStockCache;
 
 function getWarehouseStock(productName, warehouseName, startDate = null, endDate = null) {
     if (!productName) return 0;
-    const targetWH = (warehouseName || '').trim();
+    const db = window.productsDB || [];
+    const p = db.find(x => (x.name && x.name.trim() === String(productName).trim()) || x.id == productName);
+    if (!p) return 0;
 
+    const targetWH = (warehouseName || 'المخزن الرئيسي').trim();
+
+    // 1. القراءة اللحظية المباشرة من قاعدة بيانات المخزون الموثوقة (بدون فلترة تاريخية)
+    if (!startDate && !endDate) {
+        const isMainWH = (targetWH === 'المخزن الرئيسي' || 
+            (typeof warehouses !== 'undefined' && warehouses.length <= 1) || 
+            (typeof warehouses !== 'undefined' && warehouses[0] && warehouses[0].name.trim() === targetWH));
+
+        const totalStock = parseFloat(p.stock) || 0;
+
+        if (isMainWH) {
+            if (p.warehouseStocks) {
+                // حساب مجموع المخازن الفرعية الأخرى
+                let otherWHStock = 0;
+                Object.keys(p.warehouseStocks).forEach(wh => {
+                    const isNotMain = (wh.trim() !== 'المخزن الرئيسي' && (!warehouses || !warehouses[0] || warehouses[0].name.trim() !== wh.trim()));
+                    if (isNotMain) {
+                        otherWHStock += (parseFloat(p.warehouseStocks[wh]) || 0);
+                    }
+                });
+
+                if (p.warehouseStocks[targetWH] !== undefined && (parseFloat(p.warehouseStocks[targetWH]) || 0) > 0) {
+                    return parseFloat(p.warehouseStocks[targetWH]) || 0;
+                }
+                return Math.max(0, totalStock - otherWHStock);
+            }
+            return totalStock;
+        }
+
+        if (p.warehouseStocks && p.warehouseStocks[targetWH] !== undefined) {
+            return parseFloat(p.warehouseStocks[targetWH]) || 0;
+        }
+        return 0;
+    }
+
+    // 2. الفلترة التاريخية (تقرير المخازن لفترة محددة)
     const cacheKey = `${startDate || ''}_${endDate || ''}_${transactions.length}_${productsDB.length}`;
     if (!_stockCache || _stockCacheKey !== cacheKey) {
         _stockCache = {};
@@ -1181,12 +1216,13 @@ function getWarehouseStock(productName, warehouseName, startDate = null, endDate
 
         const prodIndex = {};
         const globalChangeMap = {};
-        productsDB.forEach(p => {
-            if (p.name) {
-                const n = p.name.trim();
-                prodIndex[n] = p;
-                prodIndex[n.toLowerCase()] = p;
+        productsDB.forEach(prod => {
+            if (prod && prod.name) {
+                const n = prod.name.trim();
+                prodIndex[n] = prod;
+                prodIndex[n.toLowerCase()] = prod;
                 _stockCache[n] = {};
+                _stockCache[n.toLowerCase()] = _stockCache[n];
                 globalChangeMap[n] = 0;
             }
         });
@@ -1196,7 +1232,7 @@ function getWarehouseStock(productName, warehouseName, startDate = null, endDate
             const rawName = (t.product || t.productName || t.name || '').trim();
             if (!rawName) continue;
             const pRef = prodIndex[rawName] || prodIndex[rawName.toLowerCase()];
-            if (!pRef) continue;
+            if (!pRef || !pRef.name) continue;
             const pName = pRef.name.trim();
 
             let tDateISO = (t.dateISO || t.date || '').trim();
@@ -1226,13 +1262,17 @@ function getWarehouseStock(productName, warehouseName, startDate = null, endDate
             else if (type.includes('مرتجع بيع')) change = qty;
             else if (type.includes('بيع') && !type.includes('مرتجع')) change = -qty;
             else if (type.includes('مرتجع شراء')) change = -qty;
-            else if (type.includes('تسوية') && type.includes('+')) change = qty;
-            else if (type.includes('تسوية') && type.includes('-')) change = -qty;
-
-            if (!type.includes('تحويل')) {
-                globalChangeMap[pName] += change;
+            else if (type.includes('تسوية')) {
+                if (type.includes('+')) change = Math.abs(qty);
+                else if (type.includes('-')) change = -Math.abs(qty);
+                else change = qty;
             }
 
+            if (!type.includes('تحويل')) {
+                globalChangeMap[pName] = (globalChangeMap[pName] || 0) + change;
+            }
+
+            if (!_stockCache[pName]) _stockCache[pName] = {};
             if (!_stockCache[pName][tWH]) _stockCache[pName][tWH] = 0;
             _stockCache[pName][tWH] += change;
 
@@ -1241,6 +1281,7 @@ function getWarehouseStock(productName, warehouseName, startDate = null, endDate
                 if (parts.length === 2) {
                     const wTo = parts[1].trim();
                     const wFrom = parts[0].trim();
+                    if (!_stockCache[pName]) _stockCache[pName] = {};
                     if (!_stockCache[pName][wTo]) _stockCache[pName][wTo] = 0;
                     _stockCache[pName][wTo] += qty;
                     if (!_stockCache[pName][wFrom]) _stockCache[pName][wFrom] = 0;
@@ -1248,26 +1289,10 @@ function getWarehouseStock(productName, warehouseName, startDate = null, endDate
                 }
             }
         }
-
-        if (!startDate) {
-            productsDB.forEach(p => {
-                if (!p.name) return;
-                const initialBal = (parseFloat(p.stock) || 0) - (globalChangeMap[p.name] || 0);
-                if (typeof warehouses !== 'undefined') {
-                    warehouses.forEach(w => {
-                        const wName = w.name.trim();
-                        const isMainWH = (wName === 'المخزن الرئيسي' || warehouses.length === 1 || (warehouses[0] && warehouses[0].name.trim() === wName));
-                        if (isMainWH) {
-                            _stockCache[p.name][wName] = (initialBal + (_stockCache[p.name][wName] || 0));
-                        }
-                    });
-                }
-            });
-        }
     }
 
-    const pStocks = _stockCache[productName];
-    if (!pStocks) return 0;
+    const pKey = (p.name || '').trim();
+    const pStocks = _stockCache ? (_stockCache[pKey] || _stockCache[pKey.toLowerCase()] || {}) : {};
     return pStocks[targetWH] || 0;
 }
 
@@ -1465,7 +1490,19 @@ async function saveNewItem(mode = 'save') {
     }
 
     const finalId = (typeof currentEditingProductId !== 'undefined' && currentEditingProductId) ? currentEditingProductId : Date.now();
+    const existingProduct = (typeof currentEditingProductId !== 'undefined' && currentEditingProductId)
+        ? productsDB.find(p => p.id === currentEditingProductId)
+        : null;
+
+    // الحفاظ على توزيع الأرصدة بالمخازن وتحديث المخزن النشط في حال تغيير الرصيد يدوياً
+    let finalWarehouseStocks = existingProduct && existingProduct.warehouseStocks ? { ...existingProduct.warehouseStocks } : {};
+    const activeWH = (typeof currentUser !== 'undefined' && currentUser && currentUser.warehouseName) ? currentUser.warehouseName : 'المخزن الرئيسي';
+    if (Object.keys(finalWarehouseStocks).length === 0) {
+        finalWarehouseStocks[activeWH] = stock;
+    }
+
     const newItem = {
+        ...(existingProduct || {}),
         id: finalId,
         sysCode: sysCode || String(finalId),
         name, price, cost, wholesale, minPrice, discount,
@@ -1474,8 +1511,9 @@ async function saveNewItem(mode = 'save') {
         units,
         variants,
         unit: units.length > 0 ? units[0].unitName : "قطعة",
-        image: typeof currentProductImageData !== 'undefined' ? currentProductImageData : null,
-        isQuick: document.getElementById('isQuickItem') ? document.getElementById('isQuickItem').checked : false
+        image: typeof currentProductImageData !== 'undefined' ? currentProductImageData : (existingProduct ? existingProduct.image : null),
+        isQuick: document.getElementById('isQuickItem') ? document.getElementById('isQuickItem').checked : false,
+        warehouseStocks: finalWarehouseStocks
     };
 
     if (typeof currentEditingProductId !== 'undefined' && currentEditingProductId) {
@@ -1508,7 +1546,11 @@ async function saveNewItem(mode = 'save') {
         showToast("✅ تم الحفظ التلقائي للصنف بنجاح", "success");
     }
 
+    if (typeof _invSummaryCache !== 'undefined') _invSummaryCache = null;
+    if (typeof invalidateStockCache === 'function') invalidateStockCache();
     renderInventoryTable();
+    if (typeof renderHistoryTable === 'function') renderHistoryTable();
+    if (typeof updateProductSearchDatalist === 'function') updateProductSearchDatalist();
     if (typeof updateWarehousesSummaryBoard === 'function') updateWarehousesSummaryBoard();
 
     if (mode === 'save') {
@@ -1895,8 +1937,8 @@ function handleAdjSearch(query) {
                 <div style="max-height: 380px; overflow-y: auto; padding: 6px; scrollbar-gutter: stable;">
                     ${filtered.map(p => {
                         const costVal = parseFloat(p.cost) || 0;
-                        const priceVal = parseFloat(p.price) || 0;
-                        const stockVal = parseFloat(p.stock) || 0;
+                        const activeWH = (typeof currentUser !== 'undefined' && currentUser && currentUser.warehouseName) ? currentUser.warehouseName : 'المخزن الرئيسي';
+                        const stockVal = (typeof getWarehouseStock === 'function') ? getWarehouseStock(p.name, activeWH) : (parseFloat(p.stock) || 0);
                         return `
                             <div class="pos-search-row" onclick="
                                 document.getElementById('adjSearchResults').style.display='none';
@@ -1993,7 +2035,8 @@ function renderAdjTable() {
     window.adjCart.forEach((item, idx) => {
         const factor = item.unitFactor || 1;
         const totalAdj = item.qty * factor;
-        const stockBefore = parseFloat(item.stock) || 0;
+        const activeWH = (typeof currentUser !== 'undefined' && currentUser && currentUser.warehouseName) ? currentUser.warehouseName : 'المخزن الرئيسي';
+        const stockBefore = (typeof getWarehouseStock === 'function') ? getWarehouseStock(item.name, activeWH) : (parseFloat(item.stock) || 0);
         const stockAfter = stockBefore + totalAdj;
 
         const lineTotal = (item.qty * item.price);
@@ -2111,7 +2154,10 @@ async function saveAdjustment() {
         const p = productsDB.find(x => x.id === item.id || x.name === item.name);
         if (p) {
             const factor = item.unitFactor || 1;
-            const newBaseStock = item.qty * factor;
+            const itemQtyNum = parseFloat(item.qty) || 0;
+            const newBaseStock = itemQtyNum * factor;
+            const isPositive = itemQtyNum >= 0;
+            const adjTypeStr = isPositive ? 'تسوية مخزن (+) ⚖️' : 'تسوية مخزن (-) ⚖️';
 
             p.stock = (parseFloat(p.stock) || 0) + newBaseStock;
             if (!p.warehouseStocks) p.warehouseStocks = {};
@@ -2136,28 +2182,29 @@ async function saveAdjustment() {
                 p.stock = p.variants.reduce((sum, v) => sum + (parseFloat(v.stock) || 0), 0);
             }
 
-            const lineTotal = (parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0);
+            const lineTotal = Math.abs(itemQtyNum) * (parseFloat(item.price) || 0);
             grandTotal += lineTotal;
 
             transactions.push({
                 date: dt.full,
                 dateISO: dt.iso,
                 timeISO: dt.time,
-                type: 'تسوية مخزن ⚖️',
+                type: adjTypeStr,
                 method: '-',
                 invoiceId: adjId,
                 product: p.name,
                 unit: item.selectedUnit ? item.selectedUnit.unitName : (p.unit || 'قطعة'),
                 size: item.selectedSize || item.size || '',
                 color: item.selectedColor || item.color || '',
-                qty: item.qty,
+                qty: Math.abs(itemQtyNum),
                 price: item.price,
                 total: lineTotal,
-                partner: 'جرد',
+                partner: isPositive ? 'تسوية مخزن (إضافة / فائض)' : 'تسوية مخزن (خصم / عجز)',
                 warehouse: activeWH,
                 user: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.name : '-',
-                notes: document.getElementById('adjNotes') ? document.getElementById('adjNotes').value.trim() : '',
+                notes: document.getElementById('adjNotes') ? document.getElementById('adjNotes').value.trim() : (item.notes || ''),
                 unitFactor: factor,
+                balanceAfter: p.stock,
                 editDate: (typeof isEditMode !== 'undefined' && isEditMode) ? new Date().toLocaleString('ar-EG') : '-'
             });
         }
@@ -2170,8 +2217,8 @@ async function saveAdjustment() {
         type: 'تسوية مخزن ⚖️',
         isInvoiceHead: true,
         invoiceId: adjId,
-        total: 0,
-        partner: 'جرد (تسوية)',
+        total: grandTotal,
+        partner: 'محضر تسوية جرد',
         warehouse: activeWH,
         user: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.name : '-',
         notes: document.getElementById('adjNotes') ? document.getElementById('adjNotes').value.trim() : '',
@@ -2179,7 +2226,17 @@ async function saveAdjustment() {
     });
 
     if (typeof saveData === 'function') await saveData();
-    alert("✅ تم الحفظ بنجاح!!");
+
+    // تحديث فوري لكافة الجداول والتقارير المرتبطة (قسم البضاعة، كروت الإحصائيات، تقرير حركة الصنف، الفواتير)
+    if (typeof _invSummaryCache !== 'undefined') _invSummaryCache = null;
+    if (typeof renderInventoryTable === 'function') renderInventoryTable();
+    if (typeof renderCards === 'function') renderCards();
+    if (typeof renderWarehouseReportTable === 'function') renderWarehouseReportTable();
+    if (typeof renderHistoryTable === 'function') renderHistoryTable();
+    if (typeof renderInvoicesTable === 'function') renderInvoicesTable();
+    if (typeof updateProductSearchDatalist === 'function') updateProductSearchDatalist();
+
+    alert("✅ تم الحفظ وتحديث رصيد المخزن بنجاح!!");
 
     if (typeof isEditMode !== 'undefined') window.isEditMode = false;
     if (typeof editingInvoiceId !== 'undefined') window.editingInvoiceId = null;
@@ -2460,6 +2517,10 @@ function fillProductModal(p) {
     const vBody = document.getElementById('productVariantsTableBody');
     if (vBody) {
         vBody.innerHTML = '';
+        window._deletedVariantsStack = [];
+        const undoBanner = document.getElementById('variantsUndoBanner');
+        if (undoBanner) undoBanner.style.display = 'none';
+
         if (p.variants && Array.isArray(p.variants) && p.variants.length > 0) {
             const isColorsOnly = p.variants.every(v => !v.size || v.size.trim() === '');
             setVariantMode(isColorsOnly ? 'colors' : 'sizes');
@@ -2471,6 +2532,35 @@ function fillProductModal(p) {
         }
         updateVariantsCountBadge();
         calculateTotalVariantsStock();
+        setVariantsDisplayView('matrix');
+    }
+
+    // عرض تفاصيل توزيع الرصيد على كافة المخازن (Warehouse Distribution Breakdown)
+    const distBox = document.getElementById('itemWarehouseDistributionBox');
+    const distGrid = document.getElementById('itemWarehouseStocksGrid');
+    const distTotalBadge = document.getElementById('itemWarehouseTotalBadge');
+    if (distBox && distGrid) {
+        const whList = (typeof warehouses !== 'undefined' && Array.isArray(warehouses) && warehouses.length > 0)
+            ? warehouses
+            : [{ name: 'المخزن الرئيسي' }];
+
+        if (whList.length > 0 && p.name) {
+            distBox.style.display = 'block';
+            let totalAllWh = 0;
+            distGrid.innerHTML = whList.map(wh => {
+                const whStock = (typeof getWarehouseStock === 'function') ? getWarehouseStock(p.name, wh.name) : 0;
+                totalAllWh += whStock;
+                return `
+                    <div style="background: white; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                        <span style="font-weight: 800; font-size: 0.85rem; color: #334155;">🏢 ${wh.name}:</span>
+                        <span style="font-weight: 900; font-size: 1rem; color: ${whStock > 0 ? '#059669' : '#94a3b8'};">${whStock} <small style="font-size:0.7rem;">${p.unit || 'قطعة'}</small></span>
+                    </div>
+                `;
+            }).join('');
+            if (distTotalBadge) distTotalBadge.innerText = `🌍 الإجمالي الكلي: ${p.stock || totalAllWh} ${p.unit || 'قطعة'}`;
+        } else {
+            distBox.style.display = 'none';
+        }
     }
 
     if (typeof calculateUnitPrices === 'function') calculateUnitPrices();
@@ -2627,7 +2717,7 @@ function generateVariantBarcode(size = '', color = '', index = 1) {
     return `20${cleanBase}${index}${randSuffix}`.slice(0, 13);
 }
 
-function addVariantRow(size = '', color = '', barcode = '', stock = 0, price = null, wholesale = null, cost = null) {
+function addVariantRow(size = '', color = '', barcode = '', stock = 1, price = null, wholesale = null, cost = null) {
     const tbody = document.getElementById('productVariantsTableBody');
     if (!tbody) return;
 
@@ -2676,13 +2766,360 @@ function addVariantRow(size = '', color = '', barcode = '', stock = 0, price = n
                 style="height: 32px; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; border-radius: 6px; color: #d97706;">
         </td>
         <td>
-            <button type="button" onclick="this.closest('tr').remove(); updateVariantsCountBadge(); calculateTotalVariantsStock();"
-                style="background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-weight: bold;">✕</button>
+            <button type="button" onclick="removeVariantRow(this)"
+                style="background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-weight: bold;" title="حذف هذا الصف">✕</button>
         </td>
     `;
     tbody.appendChild(tr);
     updateVariantsCountBadge();
+    if (window._variantCurrentView === 'matrix') {
+        renderVariantMatrixGrid();
+    }
 }
+
+// ↩️ مكدس استرجاع التشكيلات المحذوفة (Undo Stack)
+window._deletedVariantsStack = [];
+window._variantCurrentView = 'matrix';
+
+function removeVariantRow(btn) {
+    const tr = btn.closest('tr');
+    if (!tr) return;
+
+    const size = tr.querySelector('.var-size-input')?.value || '';
+    const color = tr.querySelector('.var-color-input')?.value || '';
+    const barcode = tr.querySelector('.var-barcode-input')?.value || '';
+    const stock = parseFloat(tr.querySelector('.var-stock-input')?.value) || 0;
+    const price = parseFloat(tr.querySelector('.var-price-input')?.value) || 0;
+    const wholesale = parseFloat(tr.querySelector('.var-ws-input')?.value) || 0;
+    const cost = parseFloat(tr.querySelector('.var-cost-input')?.value) || 0;
+
+    window._deletedVariantsStack.push({ size, color, barcode, stock, price, wholesale, cost });
+
+    tr.remove();
+    updateVariantsCountBadge();
+    calculateTotalVariantsStock();
+
+    // إظهار شريط التراجع
+    const undoBanner = document.getElementById('variantsUndoBanner');
+    const undoText = document.getElementById('variantsUndoText');
+    if (undoBanner && undoText) {
+        const desc = [size ? `مقاس (${size})` : '', color ? `لون (${color})` : ''].filter(Boolean).join(' - ') || 'التشكيلة';
+        undoText.innerText = `تم حذف ${desc} (رصيد: ${stock} قطعة).`;
+        undoBanner.style.display = 'flex';
+    }
+
+    if (window._variantCurrentView === 'matrix') {
+        renderVariantMatrixGrid();
+    }
+}
+window.removeVariantRow = removeVariantRow;
+
+function restoreLastDeletedVariant() {
+    if (!window._deletedVariantsStack || window._deletedVariantsStack.length === 0) {
+        const undoBanner = document.getElementById('variantsUndoBanner');
+        if (undoBanner) undoBanner.style.display = 'none';
+        return;
+    }
+
+    const item = window._deletedVariantsStack.pop();
+    addVariantRow(item.size, item.color, item.barcode, item.stock, item.price, item.wholesale, item.cost);
+    calculateTotalVariantsStock();
+
+    if (window._deletedVariantsStack.length === 0) {
+        const undoBanner = document.getElementById('variantsUndoBanner');
+        if (undoBanner) undoBanner.style.display = 'none';
+    } else {
+        const undoText = document.getElementById('variantsUndoText');
+        if (undoText) undoText.innerText = `متبقي (${window._deletedVariantsStack.length}) تشكيلات محذوفة.`;
+    }
+
+    showToast(`↩️ تم استرجاع التشكيلة (${item.size || ''} ${item.color || ''}) بنجاح!`, "success");
+}
+window.restoreLastDeletedVariant = restoreLastDeletedVariant;
+
+// 🎛️ التبديل بين عرض الشبكة الذكية والجدول التفصيلي
+function setVariantsDisplayView(view) {
+    window._variantCurrentView = view;
+    const btnMatrix = document.getElementById('btn-variant-view-matrix');
+    const btnTable = document.getElementById('btn-variant-view-table');
+    const gridContainer = document.getElementById('variantMatrixGridContainer');
+    const tableContainer = document.getElementById('productVariantsTableContainer');
+
+    if (view === 'matrix') {
+        if (btnMatrix) {
+            btnMatrix.style.background = '#7c3aed';
+            btnMatrix.style.color = 'white';
+            btnMatrix.style.border = 'none';
+            btnMatrix.style.boxShadow = '0 2px 6px rgba(124,58,237,0.25)';
+        }
+        if (btnTable) {
+            btnTable.style.background = 'white';
+            btnTable.style.color = '#475569';
+            btnTable.style.border = '1.5px solid #cbd5e1';
+            btnTable.style.boxShadow = 'none';
+        }
+        if (gridContainer) gridContainer.style.display = 'block';
+        if (tableContainer) tableContainer.style.display = 'none';
+        renderVariantMatrixGrid();
+    } else {
+        if (btnTable) {
+            btnTable.style.background = '#7c3aed';
+            btnTable.style.color = 'white';
+            btnTable.style.border = 'none';
+            btnTable.style.boxShadow = '0 2px 6px rgba(124,58,237,0.25)';
+        }
+        if (btnMatrix) {
+            btnMatrix.style.background = 'white';
+            btnMatrix.style.color = '#475569';
+            btnMatrix.style.border = '1.5px solid #cbd5e1';
+            btnMatrix.style.boxShadow = 'none';
+        }
+        if (tableContainer) tableContainer.style.display = 'block';
+        if (gridContainer) gridContainer.style.display = 'none';
+    }
+}
+window.setVariantsDisplayView = setVariantsDisplayView;
+
+// 📊 رسم شبكة المقاسات والألوان الذكية (2D Matrix Grid)
+function renderVariantMatrixGrid() {
+    const container = document.getElementById('variantMatrixGridContent');
+    if (!container) return;
+
+    const rows = Array.from(document.getElementById('productVariantsTableBody')?.rows || []);
+    if (rows.length === 0) {
+        container.innerHTML = `
+            <div style="text-align:center; padding: 25px; color: #94a3b8;">
+                <div style="font-size: 2rem; margin-bottom: 6px;">⚡</div>
+                <div style="font-weight: 800; font-size: 0.95rem; color: #64748b;">لا توجد مقاسات أو ألوان مضافة حتى الآن</div>
+                <div style="font-size: 0.8rem; margin-top: 4px;">استخدم المولد السريع بالأعلى أو زر (إضافة صف) لإضافة التشكيلات</div>
+            </div>
+        `;
+        return;
+    }
+
+    const items = rows.map(r => ({
+        size: r.querySelector('.var-size-input')?.value?.trim() || '',
+        color: r.querySelector('.var-color-input')?.value?.trim() || 'موحد',
+        stock: parseFloat(r.querySelector('.var-stock-input')?.value) || 0,
+        price: parseFloat(r.querySelector('.var-price-input')?.value) || 0,
+        wholesale: parseFloat(r.querySelector('.var-ws-input')?.value) || 0,
+        cost: parseFloat(r.querySelector('.var-cost-input')?.value) || 0,
+        rowRef: r
+    }));
+
+    const isColorsOnly = (window._currentVariantMode === 'colors') || items.every(it => !it.size || it.size === 'قياسي');
+
+    if (isColorsOnly) {
+        // عرض كروت الألوان الأنيقة السريعة للشنط والإكسسوارات
+        let cardsHtml = items.map((it, idx) => `
+            <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; transition: 0.2s;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 14px; height: 14px; border-radius: 50%; background: #6366f1; display: inline-block;"></span>
+                    <span style="font-weight: 900; font-size: 0.95rem; color: #1e293b;">${it.color}</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 0.8rem; font-weight: 800; color: #64748b;">الكمية:</span>
+                        <input type="number" min="0" value="${it.stock}" 
+                            oninput="updateMatrixColorQty('${it.color.replace(/'/g, "\\'")}', this.value)"
+                            style="width: 75px; height: 32px; text-align: center; font-weight: 900; font-size: 1rem; color: #047857; border: 1.5px solid #10b981; border-radius: 8px; background: white;">
+                    </div>
+                    <button type="button" onclick="removeVariantRow(document.getElementById('productVariantsTableBody').rows[${idx}].querySelector('button'))"
+                        style="background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-weight: bold;" title="حذف هذا اللون">✕</button>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = `
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;">
+                ${cardsHtml}
+            </div>
+        `;
+        return;
+    }
+
+    // عرض مصفوفة 2D Grid (المقاسات كأعمدة والألوان كصفوف)
+    const distinctSizes = [...new Set(items.map(it => it.size).filter(Boolean))];
+    distinctSizes.sort((a, b) => (typeof compareSizes === 'function' ? compareSizes(a, b) : a.localeCompare(b)));
+
+    const distinctColors = [...new Set(items.map(it => it.color || 'موحد'))];
+
+    // خريطة الرصيد لكل [color][size]
+    const matrixMap = {};
+    distinctColors.forEach(c => { matrixMap[c] = {}; });
+    items.forEach(it => {
+        const c = it.color || 'موحد';
+        const s = it.size || '';
+        matrixMap[c][s] = it.stock;
+    });
+
+    let headerThs = distinctSizes.map(sz => `
+        <th style="padding: 8px 6px; background: #1e293b; color: white; border: 1px solid #334155; font-size: 0.85rem; font-weight: 900; min-width: 65px;">
+            ${sz}
+        </th>
+    `).join('');
+
+    let rowsHtml = distinctColors.map(col => {
+        let colSum = 0;
+        let cellsHtml = distinctSizes.map(sz => {
+            const val = matrixMap[col][sz] !== undefined ? matrixMap[col][sz] : 0;
+            colSum += val;
+            return `
+                <td style="padding: 4px; border: 1px solid #e2e8f0; text-align: center;">
+                    <input type="number" min="0" value="${val}"
+                        oninput="updateMatrixCellStock('${col.replace(/'/g, "\\'")}', '${sz.replace(/'/g, "\\'")}', this.value)"
+                        style="width: 58px; height: 32px; text-align: center; font-weight: 900; font-size: 0.95rem; color: ${val <= 0 ? '#dc2626' : '#047857'}; border: 1.5px solid ${val <= 0 ? '#fca5a5' : '#a7f3d0'}; border-radius: 6px; background: ${val <= 0 ? '#fef2f2' : '#f0fdf4'}; outline: none; transition: 0.15s;"
+                        onfocus="this.style.borderColor='#7c3aed'; this.select();"
+                        onblur="this.style.borderColor='${val <= 0 ? '#fca5a5' : '#a7f3d0'}';">
+                </td>
+            `;
+        }).join('');
+
+        return `
+            <tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.15s;" onmouseenter="this.style.background='#f8fafc';" onmouseleave="this.style.background='';">
+                <td style="padding: 8px 12px; font-weight: 900; color: #1e293b; text-align: right; border: 1px solid #e2e8f0; white-space: nowrap; font-size: 0.88rem; background: #fdfdfd;">
+                    🎨 ${col}
+                </td>
+                ${cellsHtml}
+                <td style="padding: 8px 10px; font-weight: 900; color: #7c3aed; background: #faf5ff; border: 1px solid #e2e8f0; text-align: center; font-size: 0.95rem;" class="matrix-color-sum-${col.replace(/\s+/g, '_')}">
+                    ${colSum}
+                </td>
+                <td style="padding: 4px; border: 1px solid #e2e8f0; text-align: center;">
+                    <button type="button" onclick="removeMatrixColor('${col.replace(/'/g, "\\'")}')"
+                        style="background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; border-radius: 6px; padding: 3px 7px; cursor: pointer; font-weight: bold; font-size: 0.75rem;" title="حذف هذا اللون بجميع مقاساته">✕</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    // صف إجمالي كل مقاس
+    let footerTds = distinctSizes.map(sz => {
+        let sizeSum = 0;
+        distinctColors.forEach(col => {
+            sizeSum += (matrixMap[col][sz] || 0);
+        });
+        return `
+            <td style="padding: 8px 6px; font-weight: 900; color: #1e293b; background: #f1f5f9; border: 1px solid #cbd5e1; text-align: center; font-size: 0.9rem;">
+                ${sizeSum}
+            </td>
+        `;
+    }).join('');
+
+    const grandTotal = items.reduce((sum, it) => sum + (it.stock || 0), 0);
+
+    container.innerHTML = `
+        <div style="overflow-x: auto; max-width: 100%;">
+            <table style="width: 100%; border-collapse: collapse; text-align: center; font-size: 0.85rem;">
+                <thead>
+                    <tr>
+                        <th style="padding: 8px 12px; background: #0f172a; color: white; border: 1px solid #334155; text-align: right; min-width: 100px;">اللون / المقاس</th>
+                        ${headerThs}
+                        <th style="padding: 8px 10px; background: #581c87; color: white; border: 1px solid #4c1d95; min-width: 80px;">إجمالي اللون</th>
+                        <th style="padding: 8px 6px; background: #0f172a; color: white; border: 1px solid #334155; width: 45px;">حذف</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+                <tfoot>
+                    <tr style="border-top: 2px solid #94a3b8; background: #f1f5f9;">
+                        <td style="padding: 8px 12px; font-weight: 900; color: #1e293b; text-align: right; border: 1px solid #cbd5e1;">إجمالي المقاس:</td>
+                        ${footerTds}
+                        <td style="padding: 8px 10px; font-weight: 900; color: #047857; background: #dcfce7; border: 2px solid #86efac; font-size: 1.05rem;">
+                            ${grandTotal}
+                        </td>
+                        <td style="border: 1px solid #cbd5e1;"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    `;
+}
+window.renderVariantMatrixGrid = renderVariantMatrixGrid;
+
+function updateMatrixCellStock(color, size, newQtyVal) {
+    const qty = Math.max(0, parseFloat(newQtyVal) || 0);
+    const rows = Array.from(document.getElementById('productVariantsTableBody')?.rows || []);
+    let found = false;
+
+    for (let r of rows) {
+        const rSize = r.querySelector('.var-size-input')?.value?.trim() || '';
+        const rColor = r.querySelector('.var-color-input')?.value?.trim() || 'موحد';
+        if (rSize === size && rColor === color) {
+            const stockInp = r.querySelector('.var-stock-input');
+            if (stockInp) stockInp.value = qty;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        // إضافة الصف إذا لم يكن موجوداً
+        const curPrice = parseFloat(document.getElementById('newItemPrice')?.value) || 0;
+        const curWs = parseFloat(document.getElementById('newItemWholesale')?.value) || 0;
+        const curCost = parseFloat(document.getElementById('newItemCost')?.value) || 0;
+        addVariantRow(size, color, '', qty, curPrice, curWs, curCost);
+    }
+
+    calculateTotalVariantsStock();
+    updateVariantsCountBadge();
+    
+    // تحديث إجماليات الماتريكس بدون إعادة بناء التركيز
+    setTimeout(() => {
+        renderVariantMatrixGrid();
+    }, 400);
+}
+window.updateMatrixCellStock = updateMatrixCellStock;
+
+function updateMatrixColorQty(color, newQtyVal) {
+    const qty = Math.max(0, parseFloat(newQtyVal) || 0);
+    const rows = Array.from(document.getElementById('productVariantsTableBody')?.rows || []);
+    for (let r of rows) {
+        const rColor = r.querySelector('.var-color-input')?.value?.trim() || 'موحد';
+        if (rColor === color) {
+            const stockInp = r.querySelector('.var-stock-input');
+            if (stockInp) stockInp.value = qty;
+            break;
+        }
+    }
+    calculateTotalVariantsStock();
+    updateVariantsCountBadge();
+}
+window.updateMatrixColorQty = updateMatrixColorQty;
+
+function removeMatrixColor(color) {
+    const rows = Array.from(document.getElementById('productVariantsTableBody')?.rows || []);
+    const deletedForColor = [];
+    rows.forEach(r => {
+        const rColor = r.querySelector('.var-color-input')?.value?.trim() || 'موحد';
+        if (rColor === color) {
+            const size = r.querySelector('.var-size-input')?.value || '';
+            const barcode = r.querySelector('.var-barcode-input')?.value || '';
+            const stock = parseFloat(r.querySelector('.var-stock-input')?.value) || 0;
+            const price = parseFloat(r.querySelector('.var-price-input')?.value) || 0;
+            const wholesale = parseFloat(r.querySelector('.var-ws-input')?.value) || 0;
+            const cost = parseFloat(r.querySelector('.var-cost-input')?.value) || 0;
+
+            deletedForColor.push({ size, color, barcode, stock, price, wholesale, cost });
+            r.remove();
+        }
+    });
+
+    if (deletedForColor.length > 0) {
+        window._deletedVariantsStack.push(...deletedForColor);
+        const undoBanner = document.getElementById('variantsUndoBanner');
+        const undoText = document.getElementById('variantsUndoText');
+        if (undoBanner && undoText) {
+            undoText.innerText = `تم حذف اللون (${color}) بجميع مقاساته (${deletedForColor.length} تشكيلة).`;
+            undoBanner.style.display = 'flex';
+        }
+    }
+
+    calculateTotalVariantsStock();
+    updateVariantsCountBadge();
+    renderVariantMatrixGrid();
+}
+window.removeMatrixColor = removeMatrixColor;
 
 function generateVariantsMatrix() {
     const sizesStr = document.getElementById('variantSizesInput')?.value || '';
@@ -2708,11 +3145,12 @@ function generateVariantsMatrix() {
 
     listSizes.forEach(sz => {
         listColors.forEach(col => {
-            addVariantRow(sz, col, '', 0, curPrice, curWs, curCost);
+            addVariantRow(sz, col, '', 1, curPrice, curWs, curCost);
         });
     });
 
     calculateTotalVariantsStock();
+    renderVariantMatrixGrid();
     showToast(`✅ تم توليد (${listSizes.length * listColors.length}) تشكيلة بنجاح!`, "success");
 }
 
@@ -3110,6 +3548,16 @@ async function updateRowPriceAdj(adjIndex, field, value) {
                     else if (field === 'minPrice') pInDB.minPrice = newValue;
                     else if (field === 'discount') pInDB.discount = newValue;
                     else if (field === 'avgBuyPrice') pInDB.cost = newValue;
+                    
+                    // Sync base unit (factor 1 or first unit) so that prices are consistent in sales/purchases
+                    if (pInDB.units && pInDB.units.length > 0) {
+                        const baseU = pInDB.units.find(u => parseFloat(u.factor) === 1) || pInDB.units[0];
+                        if (baseU) {
+                            if (field === 'retail') baseU.price = newValue;
+                            else if (field === 'wholesale') baseU.wholesale = newValue;
+                            else if (field === 'avgBuyPrice') baseU.cost = newValue;
+                        }
+                    }
                 } else {
                     if (pInDB.units && pInDB.units[item.unitIndex]) {
                         if (field === 'retail') pInDB.units[item.unitIndex].price = newValue;
@@ -3368,7 +3816,7 @@ document.addEventListener('keydown', (e) => {
     const activeTab = (typeof openTabs !== 'undefined') ? openTabs.find(t => t.id === activeTabId) : null;
     if (activeTab && activeTab.type === 'inventory') {
         const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
-        if (!isInput && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (!isInput && e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
             const searchInput = document.getElementById('invSearchInput');
             if (searchInput) {
                 searchInput.focus();

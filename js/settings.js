@@ -59,6 +59,7 @@ async function saveSettings() {
         autoBackup: document.getElementById('autoBackupSetting').checked,
         autoBackupInterval: document.getElementById('autoBackupInterval').value,
         printFooterMsg: document.getElementById('printFooterMsg').value,
+        shopFacebookUrl: document.getElementById('shopFacebookUrl') ? document.getElementById('shopFacebookUrl').value.trim() : '',
         // Financial Settings
         currencySymbol: document.getElementById('appCurrencySymbol').value || "ج.م",
         currencyName: document.getElementById('appCurrencyName').value || "جنيه مصري",
@@ -174,6 +175,102 @@ function updateLoginBadgeUI(type) {
 function selectBusinessType(type) {
     const hiddenInput = document.getElementById('appBusinessType');
     const oldType = hiddenInput ? (hiddenInput.value || 'clothing') : 'clothing';
+
+    // إذا كان نفس النشاط المختار حالياً، لا داعي لطلب كلمة المرور
+    if (oldType === type) return;
+
+    const names = { 
+        clothing: 'ملابس وأحذية وشنط 👕', 
+        supermarket: 'سوبر ماركت ومواد غذائية 🛒'
+    };
+
+    const targetName = names[type] || type;
+
+    // طلب كلمة المرور للأمان قبل التحويل لنشاط آخر
+    if (typeof showCustomAlert === 'function') {
+        showCustomAlert({
+            type: 'question',
+            titleText: '🔐 تأكيد الأمان: تغيير نوع النشاط التجاري',
+            msg: `
+                <div style="text-align: right; direction: rtl; font-family: 'Cairo', sans-serif;">
+                    <p style="font-weight: 800; font-size: 1rem; color: #1e293b; margin-bottom: 8px;">
+                        أنت على وشك التحويل إلى نشاط: <span style="color: #059669; font-weight: 900;">${targetName}</span>
+                    </p>
+                    <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 15px;">
+                        لحماية إعدادات النظام، يرجى إدخال رمز المرور (PIN) للمتابعة:
+                    </p>
+                    <input type="password" id="bizTypePinInput" placeholder="••••" 
+                        maxlength="20"
+                        style="width: 100%; padding: 12px; border-radius: 10px; border: 2px solid #cbd5e1; text-align: center; font-size: 1.4rem; letter-spacing: 4px; outline: none; transition: 0.2s;"
+                        onfocus="this.style.borderColor='#3b82f6'"
+                        onkeydown="if (event.key === 'Enter') { const btn = document.querySelector('.custom-modal-confirm'); if (btn) btn.click(); }">
+                </div>
+            `,
+            showCancel: true,
+            confirmText: 'تأكيد التغيير ✅',
+            cancelText: 'إلغاء ✖️',
+            onConfirm: () => {
+                const pinInput = document.getElementById('bizTypePinInput');
+                const enteredPin = pinInput ? pinInput.value.trim() : '';
+
+                if (!enteredPin) {
+                    if (typeof showToast === 'function') showToast("❌ يجب إدخال رمز المرور لتغيير النشاط التجاري", "error");
+                    return;
+                }
+
+                // التحقق من صحة رمز المرور مع المستخدم الحالي أو أي مسؤول في النظام
+                let isPinValid = false;
+                if (typeof currentUser !== 'undefined' && currentUser && currentUser.pin === enteredPin) {
+                    isPinValid = true;
+                } else if (typeof users !== 'undefined' && Array.isArray(users)) {
+                    isPinValid = users.some(u => (u.role === 'admin' || u.role === 'owner') && u.pin === enteredPin);
+                    if (!isPinValid) {
+                        isPinValid = users.some(u => u.pin === enteredPin);
+                    }
+                }
+
+                if (!isPinValid) {
+                    showCustomAlert({
+                        type: 'error',
+                        titleText: '⛔ كلمة المرور غير صحيحة',
+                        msg: 'تم منع تغيير النشاط التجاري نظراً لعدم تطابق رمز المرور المدخل.\nتم الإبقاء على نشاطك الحالي دون أي تغيير.'
+                    });
+                    return;
+                }
+
+                // تنفيذ التبديل بعد المصادقة الناجحة
+                executeBusinessTypeSwitch(type, oldType);
+            }
+        });
+
+        // تركيز تلقائي على حقل كلمة المرور
+        setTimeout(() => {
+            const pInput = document.getElementById('bizTypePinInput');
+            if (pInput) pInput.focus();
+        }, 100);
+    } else {
+        const pass = prompt(`🔐 يرجى إدخال رمز المرور لتغيير النشاط إلى [${targetName}]:`);
+        if (pass === null) return; // تم الإلغاء
+
+        let isPinValid = false;
+        if (typeof currentUser !== 'undefined' && currentUser && currentUser.pin === pass.trim()) {
+            isPinValid = true;
+        } else if (typeof users !== 'undefined' && Array.isArray(users)) {
+            isPinValid = users.some(u => (u.role === 'admin' || u.role === 'owner') && u.pin === pass.trim());
+            if (!isPinValid) isPinValid = users.some(u => u.pin === pass.trim());
+        }
+
+        if (!isPinValid) {
+            alert('⛔ رمز المرور غير صحيح، تم إلغاء تغيير النشاط التجاري.');
+            return;
+        }
+
+        executeBusinessTypeSwitch(type, oldType);
+    }
+}
+
+function executeBusinessTypeSwitch(type, oldType) {
+    const hiddenInput = document.getElementById('appBusinessType');
 
     let settings = {};
     try {
@@ -340,6 +437,7 @@ function loadSettings() {
     }
     if (settings.address) document.getElementById('shopAddress').value = settings.address;
     if (settings.printFooterMsg) document.getElementById('printFooterMsg').value = settings.printFooterMsg;
+    if (settings.shopFacebookUrl && document.getElementById('shopFacebookUrl')) document.getElementById('shopFacebookUrl').value = settings.shopFacebookUrl;
     if (settings.phones) {
         document.getElementById('shopPhone1').value = settings.phones[0] || '';
         document.getElementById('shopPhone2').value = settings.phones[1] || '';

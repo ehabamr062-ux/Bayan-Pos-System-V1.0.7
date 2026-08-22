@@ -131,17 +131,21 @@ function createWindow() {
         win.webContents.closeDevTools();
     });
 
-    // إغلاق نظيف وسريع بدون تعليق عمليات النظام
-    win.on('close', () => {
-        openWindows.delete(win);
-        if (openWindows.size === 0) {
-            isQuitting = true;
+    // إغلاق نظيف مع دعم النسخ الاحتياطي التلقائي وفحص البيانات غير المحفوظة
+    win.on('close', (e) => {
+        if (!isQuitting) {
+            e.preventDefault();
             try {
                 win.webContents.send('trigger-backup-before-quit');
-            } catch(err) {}
-            setTimeout(() => {
-                app.exit(0);
-            }, 300);
+            } catch(err) {
+                isQuitting = true;
+                win.close();
+            }
+            return;
+        }
+        openWindows.delete(win);
+        if (openWindows.size === 0) {
+            app.exit(0);
         }
     });
 
@@ -247,6 +251,51 @@ ipcMain.handle('open-url', async (event, url) => {
         console.error('Failed to open URL:', err);
     }
     return true;
+});
+
+// 🖨️ الطباعة الصامتة المباشرة بدون نوافذ منبثقة (Direct Silent Print Engine)
+ipcMain.handle('print-direct-silent', async (event, htmlContent, options = {}) => {
+    try {
+        let printWin = new BrowserWindow({
+            show: false,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true
+            }
+        });
+
+        await printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
+
+        return new Promise((resolve) => {
+            printWin.webContents.print({
+                silent: options.silent !== false,
+                printBackground: true,
+                deviceName: options.deviceName || ''
+            }, (success, failureReason) => {
+                if (!success) {
+                    console.warn('Silent print notice:', failureReason);
+                }
+                try {
+                    printWin.close();
+                } catch(e) {}
+                printWin = null;
+                resolve(success);
+            });
+        });
+    } catch (err) {
+        console.error('Direct silent print error:', err);
+        return false;
+    }
+});
+
+ipcMain.handle('get-system-printers', async () => {
+    try {
+        const win = BrowserWindow.getFocusedWindow() || mainWindow;
+        if (win && win.webContents) {
+            return await win.webContents.getPrintersAsync();
+        }
+    } catch(e) {}
+    return [];
 });
 
 // تشفير وتوقيع التراخيص

@@ -9496,6 +9496,24 @@ body.bayan-variants-disabled #bayanVariantPickerOverlay {
     display: none !important;
 }
 
+/* =========================================================================
+   🔒 خاصية إخفاء وإظهار المبالغ المالية في تقرير الحركة اليومية (Privacy Mode)
+   ========================================================================= */
+#daily-report-section.hide-financial-amounts .daily-financial-val,
+#daily-report-section.hide-financial-amounts #dailyTotalVal,
+#daily-report-section.hide-financial-amounts #opsSummaryBody td:nth-child(3),
+#daily-report-section.hide-financial-amounts #opsSummaryBody td:nth-child(4),
+#daily-report-section.hide-financial-amounts #opsSummaryBody td:nth-child(5),
+#daily-report-section.hide-financial-amounts #treasurySummaryBody td:nth-child(2),
+#daily-report-section.hide-financial-amounts #profitSummaryBody td:nth-child(2) {
+    filter: blur(6px) !important;
+    user-select: none !important;
+    pointer-events: none !important;
+    opacity: 0.35 !important;
+    transition: filter 0.25s ease, opacity 0.25s ease !important;
+}
 
-
-
+#daily-report-section.hide-financial-amounts #dailyTotalSalesReceipts {
+    background: linear-gradient(135deg, #64748b, #475569) !important;
+    box-shadow: 0 4px 12px rgba(100, 116, 139, 0.2) !important;
+}

@@ -1071,6 +1071,7 @@ data.forEach(store => {
                             const count = typeof getNextSequence === 'function' ? getNextSequence('بيع') : 1;
                             if (document.getElementById('salesBadgeID')) document.getElementById('salesBadgeID').innerText = count;
                             if (typeof renderQuickItems === 'function') renderQuickItems(); // تحديث الأصناف السريعة تلقائياً
+                            if (typeof updateSalesAutoPrintUI === 'function') updateSalesAutoPrintUI();
                         }
                         if (config.s === 'sales-return') {
                             const count = typeof getNextSequence === 'function' ? getNextSequence('مرتجع بيع') : 1;
@@ -1115,29 +1116,29 @@ data.forEach(store => {
                     }
                 });
 
-                if (targetTab.type === 'invoices') renderInvoicesTable();
+                if (targetTab.type === 'invoices' && typeof renderInvoicesTable === 'function') renderInvoicesTable();
                 if (targetTab.type === 'analysis') {
                     const anVal = document.getElementById('anPeriodFilter')?.value;
                     if (anVal && typeof applyAnalysisPeriodFilter === 'function' && anVal !== 'custom') {
                         applyAnalysisPeriodFilter(anVal);
-                    } else {
+                    } else if (typeof renderAnalysisTable === 'function') {
                         renderAnalysisTable();
                     }
                 }
                 if (targetTab.type === 'warehouse-report') {
                     const wrVal = document.getElementById('wrPeriodFilter')?.value || 'total';
                     if (typeof applyWarehouseReportPeriodFilter === 'function') applyWarehouseReportPeriodFilter(wrVal);
-                    else renderWarehouseReportTable();
+                    else if (typeof renderWarehouseReportTable === 'function') renderWarehouseReportTable();
                 }
                 if (targetTab.type === 'history') {
                     const hVal = document.getElementById('historyPeriodFilter')?.value;
                     if (hVal && typeof applyHistoryPeriodFilter === 'function' && hVal !== 'custom') {
                         applyHistoryPeriodFilter(hVal);
-                    } else {
+                    } else if (typeof renderHistoryTable === 'function') {
                         renderHistoryTable();
                     }
                 }
-                if (targetTab.type === 'daily-report') generateDailyReport();
+                if (targetTab.type === 'daily-report' && typeof generateDailyReport === 'function') generateDailyReport();
                 if (targetTab.type === 'statement') {
                     const selVal = document.getElementById('stmtAccountSelector') ? document.getElementById('stmtAccountSelector').value.trim() : '';
                     if (selVal && typeof loadSelectedAccountStatement === 'function') {
@@ -1382,7 +1383,9 @@ data.forEach(store => {
                     document.getElementById('purchaseDate').value = now.toLocaleDateString('en-CA');
                     document.getElementById('purchaseTime').value = now.toTimeString().slice(0, 5);
                 }
-                renderPurchaseCart_Finalized_V3();
+                if (typeof renderPurchaseCart_Finalized_V3 === 'function') {
+                    renderPurchaseCart_Finalized_V3();
+                }
             }
 
             if (type === 'sales-return') {
@@ -3201,10 +3204,7 @@ data.forEach(store => {
                 });
             }
 
-            const hasVariants = !isFinancial && (
-                items.some(i => (i.size || i.selectedSize || i.color || i.selectedColor)) ||
-                (typeof document !== 'undefined' && document.body.classList.contains('bayan-variants-enabled'))
-            );
+            const hasVariants = !isFinancial;
 
             let itemsHtml = '';
             let grandTotal = 0;
@@ -3417,10 +3417,14 @@ data.forEach(store => {
                         const price = parseFloat(item.price || item.costPrice || item.purchasePrice || 0);
                         const total = qty * price;
                         totalValue += total;
+                        const itemSize = item.size || item.selectedSize || '-';
+                        const itemColor = item.color || item.selectedColor || '-';
                         rowsHtml += `
                             <tr>
                                 <td>${idx + 1}</td>
                                 <td style="text-align:right;">${item.name}</td>
+                                <td>${itemSize}</td>
+                                <td>${itemColor}</td>
                                 <td>${qty} ${item.unit || ''}</td>
                                 <td>${price.toFixed(2)}</td>
                                 <td>${total.toFixed(2)}</td>
@@ -3446,6 +3450,8 @@ data.forEach(store => {
                                     <tr style="background:#f0f0f0;">
                                         <th>م</th>
                                         <th>الصنف</th>
+                                        <th>المقاس</th>
+                                        <th>اللون</th>
                                         <th>الكمية</th>
                                         <th>سعر التحويل</th>
                                         <th>الإجمالي</th>
@@ -3454,7 +3460,7 @@ data.forEach(store => {
                                 <tbody>${rowsHtml}</tbody>
                                 <tfoot>
                                     <tr style="font-weight:bold; background:#f0f0f0;">
-                                        <td colspan="4">إجمالي قيمة التحويل</td>
+                                        <td colspan="6">إجمالي قيمة التحويل</td>
                                         <td>${totalValue.toFixed(2)}</td>
                                     </tr>
                                 </tfoot>
@@ -4481,7 +4487,14 @@ data.forEach(store => {
             const settings = JSON.parse(getStore('pos_settings') || '{}');
             if (settings.autoBackup) {
                 if (typeof window.executeAutoBackupToFile === 'function') {
-                    await window.executeAutoBackupToFile(false);
+                    try {
+                        await window.executeAutoBackupToFile(false);
+                    } catch (err) {
+                        console.error("Auto backup on logout failed:", err);
+                        if (typeof showToast === 'function') {
+                            showToast("⚠️ حدث خطأ أثناء إنشاء النسخة الاحتياطية", "error");
+                        }
+                    }
                 }
             }
             currentUser = null;

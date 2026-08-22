@@ -112,7 +112,7 @@ const BayanBarcode = (function () {
      */
     function isDuplicate(barcode, excludeProductId = null) {
         if (!barcode) return false;
-        const products = (typeof getStore === 'function') ? (getStore('bayan_products') || []) : [];
+        const products = window.productsDB || (typeof getStore === 'function' ? (getStore('bayan_products') || []) : []);
         const targetBc = String(barcode).trim();
 
         return products.some(p => {
@@ -128,7 +128,7 @@ const BayanBarcode = (function () {
      */
     function findProduct(barcode) {
         if (!barcode) return null;
-        const products = (typeof getStore === 'function') ? (getStore('bayan_products') || []) : [];
+        const products = window.productsDB || (typeof getStore === 'function' ? (getStore('bayan_products') || []) : []);
         const targetBc = String(barcode).trim();
 
         return products.find(p => String(p.barcode || '').trim() === targetBc) || null;
@@ -218,11 +218,15 @@ const BayanBarcode = (function () {
      * الاستماع لإدخالات الباركود السريعة المباشرة من لوحة المفاتيح (USB / Bluetooth Scanner)
      */
     function onGlobalKeyDown(e) {
+        // حماية ضد أي حدث غير معرف أو لوحات المفاتيح اللمسية/الافتراضية
+        if (!e || typeof e.key !== 'string') return;
+
         // تجاهل الأحداث إذا كان التركيز في حقل نصي عادي متاح للكتابة، إلا إذا تم الضغط بسرعة عالية جداً بواسطة الماسح
         const activeElem = document.activeElement;
         const isInputField = activeElem && (
             activeElem.tagName === 'INPUT' || 
             activeElem.tagName === 'TEXTAREA' || 
+            activeElem.tagName === 'SELECT' ||
             activeElem.isContentEditable
         );
 
@@ -232,7 +236,7 @@ const BayanBarcode = (function () {
 
         // إذا كان هناك فارق زمني بين المفاتيح أقل من SCAN_THRESHOLD_MS يعتبر مدخل ماسح سريعا
         if (e.key === 'Enter' || e.key === 'Tab') {
-            if (buffer.length >= 2) {
+            if (buffer && buffer.length >= 2) {
                 // إذا تمت القراءة بسرعة أو كان المفتاح Enter
                 const scanned = buffer;
                 buffer = '';
@@ -249,15 +253,15 @@ const BayanBarcode = (function () {
             return;
         }
 
-        // تجميع أحرف الباركود
-        if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-            if (timeDiff < SCAN_THRESHOLD_MS || buffer.length === 0) {
-                buffer += e.key;
+        // تجميع أحرف الباركود مع حماية ضد الأحرف غير المعرفة
+        if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            if (timeDiff < SCAN_THRESHOLD_MS || !buffer || buffer.length === 0) {
+                buffer = (buffer || '') + e.key;
             } else if (timeDiff > 200) {
                 // إعادة تعيين الـ Buffer عند التوقف الطويل عن الكتابة
                 buffer = e.key;
             } else {
-                buffer += e.key;
+                buffer = (buffer || '') + e.key;
             }
         }
     }

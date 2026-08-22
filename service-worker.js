@@ -3,9 +3,9 @@
 //  النسخة المطورة للعمل أوفلاين 100%
 // ============================================================
 
-const CACHE_NAME = 'bayan-pos-v2.0.1';
-const STATIC_CACHE = 'bayan-static-v2.0.1';
-const DYNAMIC_CACHE = 'bayan-dynamic-v2.0.1';
+const CACHE_NAME = 'bayan-pos-v2.0.2';
+const STATIC_CACHE = 'bayan-static-v2.0.2';
+const DYNAMIC_CACHE = 'bayan-dynamic-v2.0.2';
 
 // كافة ملفات النظام الأساسية المتوفرة محلياً (بدون تكرار لتفادي خطأ Entry already exists على GitHub Pages)
 const STATIC_FILES = [

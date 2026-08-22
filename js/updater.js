@@ -261,7 +261,7 @@
     }
 
     function getCurrentAppVersion() {
-        return window.appVersion || '2.0.1';
+        return window.appVersion || '2.0.2';
     }
 
     function fmtNotes(notes) {
@@ -804,6 +804,22 @@
 
         document.body.appendChild(overlay);
     }
+    window.showCloudBroadcastModal = showCloudBroadcastModal;
+
+    // 🧪 دالة اختبار الإشعار السحابي الفوري
+    window.triggerTestCloudAnnouncement = function (customData = null) {
+        const defaultTest = {
+            active: true,
+            id: "msg_v202_release",
+            icon: "🚀",
+            title: "🎉 إطلاق التحديث الجديد v2.0.2",
+            message: "عملاؤنا الكرام، تم بنجاح إطلاق التحديث المعتمد v2.0.2! ✨\n\nيحتوي هذا الإصدار على تحسينات شاملة:\n• 📦 ضبط دقيق لحسابات أسعار تكلفة الأصناف بالمشتريات.\n• 📑 تحسينات في حفظ وتعديل سندات القبض والصرف وكشوف الحسابات.\n• 🏢 تطوير آليات التحويل المخزني وعزل أرصدة الفروع.\n• 👗 تحسينات في عرض وفرز تشكيلات المقاسات والألوان بالمخازن.\n• ⚡ تسريع عام للأداء وثبات متكامل لحركات المخازن والفواتير.",
+            link: "https://github.com/ehabamr062-ux/Bayan-Pos-System/releases",
+            linkText: "معرفة كافة التفاصيل 🔗",
+            alwaysShow: true
+        };
+        showCloudBroadcastModal(customData || defaultTest, 'bayan_test_seen_' + Date.now(), 0);
+    };
 
     // =========================================================================
     // 🔔 التشغيل التلقائي عند فتح التطبيق (Auto Check on Startup)

@@ -68,28 +68,29 @@
     <link rel="stylesheet" href="css/premium.css?v=2">
     <link rel="stylesheet" href="css/treasury_audit.css?v=1">
 
-    <script src="js/store.js?v=1" defer></script>
-    <script src="js/core.js?v=45" defer></script>
+    <script src="js/store.js?v=110" defer></script>
+    <script src="js/core.js?v=110" defer></script>
     <script src="lib/JsBarcode.all.min.js"></script>
     <script src="lib/qrcode.min.js"></script>
-    <script src="js/utils.js?v=27" defer></script>
-    <script src="js/settings.js?v=26" defer></script>
+    <script src="js/utils.js?v=110" defer></script>
+    <script src="js/settings.js?v=110" defer></script>
     <script src="lib/Sortable.min.js" defer></script>
-    <script src="js/ui.js?v=27" defer></script>
-    <script src="js/inventory.js?v=27" defer></script>
-    <script src="js/trash.js?v=26" defer></script>
-    <script src="js/sales.js?v=37" defer></script>
-    <script src="js/accounting.js?v=26" defer></script>
-    <script src="js/price_tracking.js?v=26" defer></script>
-    <script src="js/treasury_audit.js?v=1" defer></script>
-    <script src="js/init.js?v=26" defer></script>
-    <script src="js/print.js?v=26" defer></script>
-    <script src="js/receipt_disburse_fixes.js?v=1" defer></script>
-    <script src="js/price_tracking_fixes.js?v=1" defer></script>
-    <script src="js/history_enhancements.js?v=1" defer></script>
-    <script src="js/security.js?v=1" defer></script>
-    <script src="js/barcode.js?v=1" defer></script>
-    <script src="js/updater.js?v=1" defer></script>
+    <script src="js/ui.js?v=110" defer></script>
+    <script src="js/print.js?v=110" defer></script>
+    <script src="js/inventory.js?v=110" defer></script>
+    <script src="js/trash.js?v=110" defer></script>
+    <script src="js/sales.js?v=110" defer></script>
+    <script src="js/purchases.js?v=110" defer></script>
+    <script src="js/accounting.js?v=110" defer></script>
+    <script src="js/price_tracking.js?v=110" defer></script>
+    <script src="js/treasury_audit.js?v=110" defer></script>
+    <script src="js/init.js?v=110" defer></script>
+    <script src="js/receipt_disburse_fixes.js?v=110" defer></script>
+    <script src="js/price_tracking_fixes.js?v=110" defer></script>
+    <script src="js/history_enhancements.js?v=110" defer></script>
+    <script src="js/security.js?v=110" defer></script>
+    <script src="js/barcode.js?v=110" defer></script>
+    <script src="js/updater.js?v=110" defer></script>
 
     <style>
         @keyframes golden-glow {
@@ -1689,12 +1690,21 @@
                         <span style="font-size: 0.85rem; color: var(--main-blue);">➕ إضافة: <b
                                 id="salesTaxAmountDisplay">0.00</b></span>
                         <!-- مربع الملاحظات -->
-                        <div style="display: flex; align-items: center; gap: 5px; flex: 1; max-width: 300px;">
+                        <div style="display: flex; align-items: center; gap: 5px; flex: 1; max-width: 260px;">
                             <span style="font-size: 0.85rem; font-weight: bold; color: #64748b;">📝 ملاحظات:</span>
                             <input type="text" id="salesNotes" placeholder="اكتب ملاحظة للفاتورة..."
                                 style="flex: 1; height: 30px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 10px; font-size: 0.85rem; background: #fff; font-weight: 600;">
                         </div>
                         <div style="flex:1;"></div>
+                        <!-- زر التحكم في الطباعة التلقائية (Auto Print Toggle) -->
+                        <div id="salesAutoPrintToggle" onclick="toggleSalesAutoPrint()"
+                            title="التحكم في الطباعة التلقائية للفاتورة بعد الحفظ مباشرة"
+                            style="display: flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; user-select: none; border: 1.5px solid #cbd5e1; background: #f8fafc; color: #64748b; font-weight: 800; font-size: 0.82rem; height: 32px; box-sizing: border-box;"
+                            onmouseover="this.style.transform='scale(1.04)'"
+                            onmouseout="this.style.transform='scale(1)'">
+                            <span id="salesAutoPrintIcon" style="font-size: 1.15rem;">🖨️</span>
+                            <span id="salesAutoPrintLabel">طباعة تلقائية</span>
+                        </div>
                         <!-- كارت مستوى السعر مع زر الدبوس الذكي للتثبيت الدائم -->
                         <div style="background: #1e293b; color: white; padding: 2px 8px; border-radius: 8px; display: flex; align-items: center; gap: 6px; border: 1.5px solid var(--gold); box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
                             <span style="font-size: 0.8rem; font-weight: bold;">💳 مستوى السعر:</span>
@@ -2866,7 +2876,13 @@
                         </div>
 
                     </div>
-                    <div style="display: flex; gap: 10px; align-items: center;">
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <button id="toggleDailyReportAmountsBtn" onclick="toggleDailyReportAmounts()" 
+                            title="إخفاء / إظهار المبالغ المالية للحفاظ على الخصوصية"
+                            style="background: #f8fafc; color: #334155; border: 1.5px solid #cbd5e1; border-radius: 20px; padding: 6px 14px; font-weight: 800; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; box-shadow: 0 2px 6px rgba(0,0,0,0.05);">
+                            <span id="dailyReportAmountsIcon" style="font-size: 1.15rem;">👁️</span>
+                            <span id="dailyReportAmountsText">إخفاء المبالغ</span>
+                        </button>
                         <div id="dailyTotalSalesReceipts" onclick="copyDailyTotal()" title="انقر لنسخ المبلغ"
                             style="font-size: 0.9rem; color: #fff; font-weight: bold; background: linear-gradient(135deg, #27ae60, #2ecc71); padding: 6px 15px; border-radius: 20px; box-shadow: 0 4px 12px rgba(46, 204, 113, 0.2); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: 0.3s;"
                             onmouseover="this.style.transform='scale(1.05)'"
@@ -3132,14 +3148,10 @@
                             <th>الصنف</th>
                             <th class="col-variant-size" style="width: 85px; background: #064e3b; color: white;">المقاس</th>
                             <th class="col-variant-color" style="width: 85px; background: #1e3a8a; color: white;">اللون</th>
-                            <th style="width: 100px;">الوحدة</th>
                             <th style="width: 100px;" data-i18n="qty" data-i18n="qty">الكمية</th>
                             <th style="width: 120px;">سعر الشراء</th>
-                            <th style="width: 90px; background: #f0fdf4 !important; color: #166534 !important;">قطاعي
-                            </th>
-                            <th style="width: 90px; background: #fffbeb !important; color: #92400e !important;">جملة
-                            </th>
-                            <th style="width: 100px;">الإجمالي</th>
+                            <th style="width: 110px; background: #f0fdf4 !important; color: #166534 !important;">سعر القطاعي</th>
+                            <th style="width: 110px;">الإجمالي</th>
                             <th style="width: 60px; background: #e74c3c !important; color: white !important;">⚙️</th>
                         </tr>
                     </thead>
@@ -6138,9 +6150,18 @@
                                         <label
                                             style="font-size: 0.75rem; font-weight: 800; color: #7c2d12; margin-bottom: 8px; display: block;">سياسة
                                             الاستبدال أو رسالة الشكر</label>
-                                        <textarea id="printFooterMsg" rows="4"
+                                        <textarea id="printFooterMsg" rows="3"
                                             placeholder="مثال: البضاعة المباعة لا ترد ولا تستبدل بعد 14 يوم..."
-                                            style="width: 100%; border-radius: 12px; border: 1px solid #fed7aa; padding: 15px; font-family: 'Cairo', sans-serif; font-size: 0.9rem; font-weight: 700; resize: none; background: white;"></textarea>
+                                            style="width: 100%; border-radius: 12px; border: 1px solid #fed7aa; padding: 12px 15px; font-family: 'Cairo', sans-serif; font-size: 0.9rem; font-weight: 700; resize: none; background: white;"></textarea>
+                                    </div>
+                                    <div class="form-group" style="margin-top: 15px;">
+                                        <label
+                                            style="font-size: 0.75rem; font-weight: 800; color: #7c2d12; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                                            <span>🌐</span> رابط صفحة الفيسبوك / السوشيال ميديا لرمز (QR Code)
+                                        </label>
+                                        <input type="url" id="shopFacebookUrl" placeholder="مثال: https://www.facebook.com/your-page-link"
+                                            style="width: 100%; border-radius: 12px; border: 1px solid #fed7aa; padding: 12px 15px; font-family: 'Cairo', sans-serif; font-size: 0.9rem; font-weight: 700; background: white; direction: ltr; text-align: left;">
+                                        <small style="color: #9a3412; font-size: 0.72rem; font-weight: 700; margin-top: 5px; display: block;">💡 عند وضع رابط صفحتك هنا، سيتحول الـ QR Code في الفاتورة المطبوعة لرابط يفتح صفحتك مباشرة عند مسحه بكاميرا الهاتف.</small>
                                     </div>
                                 </div>
                             </div>
@@ -7533,7 +7554,7 @@
                                         style="padding: 10px 30px; background: #f8fafc; border-radius: 50px; border: 1px solid #e2e8f0; font-size: 0.95rem; font-weight: 900; color: #475569; display: flex; align-items: center; gap: 8px;">
                                         <span
                                             style="width: 8px; height: 8px; background: var(--primary-color); border-radius: 50%;"></span>
-                                        الإصدار الحالي v2.0.1
+                                        الإصدار الحالي v2.0.2
                                     </div>
                                     <div
                                         style="padding: 10px 30px; background: linear-gradient(135deg, #fffbeb, #fef3c7); border-radius: 50px; border: 1px solid #fcd34d; font-size: 0.95rem; font-weight: 900; color: #92400e; box-shadow: 0 4px 12px rgba(212, 175, 55, 0.1);">
@@ -7874,7 +7895,7 @@
                                             الحالي المثبت:</div>
                                         <div id="updateCurrentVerLabel"
                                             style="margin: 2px 0; color: #0f172a; font-size: 1.35rem; font-weight: 900; font-family: monospace;">
-                                            v2.0.1</div>
+                                            v2.0.2</div>
                                         <div style="font-size: 0.72rem; color: #059669; font-weight: 800;">✅ النظام
                                             مستقر ومحدث بالكامل</div>
                                     </div>
@@ -7890,23 +7911,32 @@
                                         <div style="font-size: 0.78rem; color: #64748b; font-weight: 800;">إجمالي التحديثات المسجلة:</div>
                                         <div id="totalUpdatesCountLabel"
                                             style="margin: 2px 0; color: #6d28d9; font-size: 1.35rem; font-weight: 900; font-family: 'Cairo', sans-serif;">
-                                            10 تحديثات معتمدة</div>
+                                            11 تحديثاً معتمداً</div>
                                         <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800;">💎 سجل تطور المنظومة والجيل الثاني</div>
                                     </div>
                                 </div>
 
-                                <!-- بطاقة 3: فحص التحديثات المباشر -->
+                                <!-- بطاقة 3: فحص التحديثات والإشعارات السحابية -->
                                 <div
                                     style="background: #ffffff; border-radius: 16px; padding: 14px 18px; border: 1.5px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 8px;">
                                     <div style="font-size: 0.8rem; color: #475569; font-weight: 800;">
                                         🔄 المزامنة والفحص التلقائي المباشر:
                                     </div>
-                                    <button class="action-btn" onclick="checkUpdates()"
-                                        style="width: 90%; height: 38px; background: linear-gradient(135deg, #1e1b4b, #312e81); color: #ffffff; border: 1px solid #4338ca; border-radius: 10px; font-weight: 900; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(30, 27, 75, 0.25); transition: 0.25s;"
-                                        onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(30, 27, 75, 0.35)'"
-                                        onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 12px rgba(30, 27, 75, 0.25)'">
-                                        <span>🔍</span> فحص التحديثات الآن
-                                    </button>
+                                    <div style="display: flex; gap: 8px; width: 100%; justify-content: center;">
+                                        <button class="action-btn" onclick="checkUpdates()"
+                                            style="flex: 1; height: 38px; background: linear-gradient(135deg, #1e1b4b, #312e81); color: #ffffff; border: 1px solid #4338ca; border-radius: 10px; font-weight: 900; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 12px rgba(30, 27, 75, 0.25); transition: 0.25s;"
+                                            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(30, 27, 75, 0.35)'"
+                                            onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 12px rgba(30, 27, 75, 0.25)'">
+                                            <span>🔍</span> فحص التحديثات
+                                        </button>
+                                        <button class="action-btn" onclick="if(typeof triggerTestCloudAnnouncement === 'function') triggerTestCloudAnnouncement();"
+                                            title="تجربة عرض الإشعار السحابي المنبثق الآن"
+                                            style="height: 38px; padding: 0 14px; background: linear-gradient(135deg, #d97706, #b45309); color: #ffffff; border: 1px solid #f59e0b; border-radius: 10px; font-weight: 900; font-size: 0.82rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25); transition: 0.25s;"
+                                            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(217, 119, 6, 0.35)'"
+                                            onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 12px rgba(217, 119, 6, 0.25)'">
+                                            <span>☁️</span> تجربة إشعار
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -7915,10 +7945,10 @@
                                 style="background: white; border-radius: 20px; padding: 25px; border: 1px solid #e2e8f0; box-shadow: 0 4px 15px rgba(0,0,0,0.02); margin-bottom: 25px;">
                                 <h4
                                     style="margin: 0 0 15px; color: #1e293b; font-weight: 900; display: flex; align-items: center; justify-content: space-between; font-size: 1.1rem;">
-                                    <span>📝 سجل التعديلات والتحسينات في الإصدار الحالي (v2.0.1)</span>
+                                    <span>📝 سجل التعديلات والتحسينات في الإصدار الحالي (v2.0.2)</span>
                                     <span
                                         style="font-size: 0.8rem; background: #ecfdf5; color: #047857; padding: 4px 12px; border-radius: 12px; font-weight: 900; border: 1px solid #a7f3d0;">إصدار
-                                        v2.0.1 🚀</span>
+                                        v2.0.2 🚀</span>
                                 </h4>
 
                                 <div id="updateReleaseNotesBox"
@@ -7945,17 +7975,95 @@
                                         }
                                     </style>
 
-                                    <!-- 🌟 بطاقة التحديث الجديد v2.0.1 (21/08/2026) 🌟 -->
+                                    <!-- 🌟 بطاقة التحديث الجديد v2.0.2 (22/08/2026) 🌟 -->
                                     <details open
-                                        style="background: white; border: 2.5px solid #3b82f6; border-radius: 16px; padding: 14px 18px; cursor: pointer; box-shadow: 0 6px 20px rgba(59, 130, 246, 0.22); margin-bottom: 15px;">
+                                        style="background: white; border: 2.5px solid #059669; border-radius: 16px; padding: 14px 18px; cursor: pointer; box-shadow: 0 6px 20px rgba(5, 150, 105, 0.22); margin-bottom: 15px;">
                                         <summary
-                                            style="font-weight: 900; color: #1d4ed8; font-size: 1.15rem; outline: none; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                                            style="font-weight: 900; color: #047857; font-size: 1.15rem; outline: none; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
                                             <div style="display: flex; align-items: center;">
                                                 <span class="custom-chevron">▼</span>
-                                                <span>🚀 الإصدار v2.0.1 (21/08/2026) - منظومة المقاسات والألوان الشاملة، موازين الباركود الإلكترونية، وسلاسة البيع والشراء</span>
+                                                <span>🚀 الإصدار v2.0.2 (22/08/2026) - استقرار الأرصدة والمخازن، دقة تكلفة المشتريات، وتحديثات كشف الحساب والقبض والصرف</span>
                                             </div>
                                             <span
-                                                style="font-size: 0.82rem; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; padding: 4px 14px; border-radius: 10px; font-weight: 900; box-shadow: 0 2px 8px rgba(59,130,246,0.35);">إصدار معتمد v2.0.1 💎</span>
+                                                style="font-size: 0.82rem; background: linear-gradient(135deg, #059669, #047857); color: white; padding: 4px 14px; border-radius: 10px; font-weight: 900; box-shadow: 0 2px 8px rgba(5,150,105,0.35);">إصدار معتمد v2.0.2 💎</span>
+                                        </summary>
+
+                                        <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
+
+                                            <!-- 1. دقة حساب أسعار التكلفة في المشتريات وكارت الصنف -->
+                                            <details open
+                                                style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 8px 12px;">
+                                                <summary
+                                                    style="font-weight: 800; color: #15803d; font-size: 0.92rem; outline: none; display: flex; align-items: center;">
+                                                    <span class="custom-chevron">▼</span>
+                                                    📦 1. دقة حساب أسعار التكلفة في المشتريات وكارت الصنف
+                                                </summary>
+                                                <ul
+                                                    style="margin: 6px 0 0; padding-right: 20px; color: #16a34a; font-weight: 700; font-size: 0.85rem;">
+                                                    <li>اعتماد سعر شراء القطعة الواحدة مباشرة كسعر تكلفة ثابت وواضح دون تداخل مع إجماليات الفاتورة الكلية.</li>
+                                                    <li>تحديث فوري ومتناسق لسعر تكلفة الصنف في كارت الصنف وقسم البضاعة والتقارير المالية.</li>
+                                                </ul>
+                                            </details>
+
+                                            <!-- 2. تحسينات سندات القبض والصرف وكشف الحساب -->
+                                            <details open
+                                                style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 8px 12px;">
+                                                <summary
+                                                    style="font-weight: 800; color: #1d4ed8; font-size: 0.92rem; outline: none; display: flex; align-items: center;">
+                                                    <span class="custom-chevron">▼</span>
+                                                    📑 2. تحسينات وتعديل سندات القبض والصرف
+                                                </summary>
+                                                <ul
+                                                    style="margin: 6px 0 0; padding-right: 20px; color: #2563eb; font-weight: 700; font-size: 0.85rem;">
+                                                    <li>مرونة كاملة في تعديل مبالغ سندات القبض والصرف من كشف الحساب مع حفظ سلس وفوري.</li>
+                                                    <li>مزامنة مباشرة لأرصدة العملاء والموردين وتحديث القيود المالية دون أي تضارب.</li>
+                                                </ul>
+                                            </details>
+
+                                            <!-- 3. تعزيز التحويل المخزني وعزل أرصدة الفروع -->
+                                            <details open
+                                                style="background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 8px 12px;">
+                                                <summary
+                                                    style="font-weight: 800; color: #7e22ce; font-size: 0.92rem; outline: none; display: flex; align-items: center;">
+                                                    <span class="custom-chevron">▼</span>
+                                                    🏢 3. تعزيز عمليات التحويل المخزني
+                                                </summary>
+                                                <ul
+                                                    style="margin: 6px 0 0; padding-right: 20px; color: #9333ea; font-weight: 700; font-size: 0.85rem;">
+                                                    <li>منع صارم لتحويل أي كميات تتجاوز الرصيد الفعلي المتاح في مخزن المصدر.</li>
+                                                    <li>عزل دقيق لأرصدة الفروع في كارت الصنف وتقارير المخازن مع دقة العكس عند الحذف أو التعديل.</li>
+                                                </ul>
+                                            </details>
+
+                                            <!-- 4. تطوير واجهة المقاسات والألوان بالمخازن -->
+                                            <details open
+                                                style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 10px; padding: 8px 12px;">
+                                                <summary
+                                                    style="font-weight: 800; color: #b45309; font-size: 0.92rem; outline: none; display: flex; align-items: center;">
+                                                    <span class="custom-chevron">▼</span>
+                                                    👗 4. تطوير واجهة تشكيلات المقاسات والألوان
+                                                </summary>
+                                                <ul
+                                                    style="margin: 6px 0 0; padding-right: 20px; color: #d97706; font-weight: 700; font-size: 0.85rem;">
+                                                    <li>ترتيب تصاعدي قياسي للمقاسات والألوان وتوضيح إجمالي رصيد المخزن في نافذة الاختيار السريع.</li>
+                                                    <li>حماية من بيع أي مقاس أو لون نفد رصيده من المخزن المحدد.</li>
+                                                </ul>
+                                            </details>
+
+                                        </div>
+                                    </details>
+
+                                    <!-- 🌟 بطاقة التحديث السابق v2.0.1 (21/08/2026) 🌟 -->
+                                    <details
+                                        style="background: white; border: 1.5px solid #cbd5e1; border-radius: 16px; padding: 14px 18px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.03); margin-bottom: 15px;">
+                                        <summary
+                                            style="font-weight: 900; color: #334155; font-size: 1.05rem; outline: none; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                                            <div style="display: flex; align-items: center;">
+                                                <span class="custom-chevron">▼</span>
+                                                <span>📋 الإصدار v2.0.1 (21/08/2026) - منظومة المقاسات والألوان الشاملة، موازين الباركود الإلكترونية، وسلاسة البيع والشراء</span>
+                                            </div>
+                                            <span
+                                                style="font-size: 0.8rem; background: #f1f5f9; color: #475569; padding: 3px 10px; border-radius: 8px; font-weight: 800;">إصدار سابق v2.0.1</span>
                                         </summary>
 
                                         <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
@@ -11058,29 +11166,60 @@
                         </div>
                     </div>
 
-                    <!-- شريط أدوات الجدول والإجراءات المجمعة -->
+                    <!-- شريط التبديل بين عرض الشبكة الذكية والجدول التفصيلي + التراجع -->
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <button type="button" id="btn-variant-view-matrix" class="bayan-btn" onclick="setVariantsDisplayView('matrix')"
+                                style="padding: 6px 14px; font-size: 0.82rem; background: #7c3aed; color: white; font-weight: 900; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 6px rgba(124,58,237,0.25);">
+                                📊 عرض الشبكة الذكية (ماتريكس)
+                            </button>
+                            <button type="button" id="btn-variant-view-table" class="bayan-btn" onclick="setVariantsDisplayView('table')"
+                                style="padding: 6px 14px; font-size: 0.82rem; background: white; color: #475569; font-weight: 800; border-radius: 8px; border: 1.5px solid #cbd5e1; cursor: pointer; transition: all 0.2s;">
+                                📋 عرض الجدول التفصيلي
+                            </button>
                             <button type="button" class="bayan-btn" onclick="addVariantRow()"
-                                style="padding: 6px 14px; font-size: 0.82rem; background: #ecfdf5; border: 1.5px solid #10b981; color: #047857; font-weight: 900; border-radius: 8px; cursor: pointer;">
-                                ➕ إضافة صف يدوي
+                                style="padding: 6px 12px; font-size: 0.82rem; background: #ecfdf5; border: 1.5px solid #10b981; color: #047857; font-weight: 900; border-radius: 8px; cursor: pointer;">
+                                ➕ إضافة صف
                             </button>
                             <button type="button" class="bayan-btn" onclick="generateAllVariantBarcodes()"
-                                style="padding: 6px 14px; font-size: 0.82rem; background: linear-gradient(135deg, #0284c7, #0369a1); color: white; border: none; font-weight: 900; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px rgba(2,132,199,0.25);">
-                                🏷️ توليد كل الباركودات تلقائياً
+                                style="padding: 6px 12px; font-size: 0.82rem; background: linear-gradient(135deg, #0284c7, #0369a1); color: white; border: none; font-weight: 900; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px rgba(2,132,199,0.25);">
+                                🏷️ توليد الباركودات
                             </button>
                             <button type="button" class="bayan-btn" onclick="printProductVariantHangtags()"
-                                style="padding: 6px 14px; font-size: 0.82rem; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border: none; font-weight: 900; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px rgba(245,158,11,0.25);">
-                                🖨️ طباعة تيكتات الموديل (Hangtags)
+                                style="padding: 6px 12px; font-size: 0.82rem; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border: none; font-weight: 900; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px rgba(245,158,11,0.25);">
+                                🖨️ طباعة التيكتات
                             </button>
                         </div>
-                        <div style="font-size: 0.85rem; font-weight: 900; color: #581c87;">
-                            إجمالي التشكيلات / الألوان: <span id="variantsCountBadge" style="background: #e9d5ff; color: #6b21a8; padding: 3px 10px; border-radius: 12px;">0</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="font-size: 0.85rem; font-weight: 900; color: #581c87;">
+                                إجمالي التشكيلات: <span id="variantsCountBadge" style="background: #e9d5ff; color: #6b21a8; padding: 3px 10px; border-radius: 12px;">0</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- جدول المقاسات والألوان -->
-                    <div style="max-height: 240px; overflow-y: auto; border: 1.5px solid #e2e8f0; border-radius: 12px; background: white;">
+                    <!-- شريط التراجع عن الحذف (Undo Banner) -->
+                    <div id="variantsUndoBanner" style="display: none; background: linear-gradient(135deg, #fffbeb, #fef3c7); border: 1.5px solid #f59e0b; padding: 8px 14px; border-radius: 10px; margin-bottom: 8px; align-items: center; justify-content: space-between; font-size: 0.85rem;">
+                        <div style="display: flex; align-items: center; gap: 8px; color: #92400e; font-weight: 900;">
+                            <span>⚠️</span>
+                            <span id="variantsUndoText">تم حذف المقاس بنجاح.</span>
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" onclick="restoreLastDeletedVariant()" style="background: #d97706; color: white; border: none; padding: 4px 12px; border-radius: 6px; font-weight: 900; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                                ↩️ تراجع واسترجاع
+                            </button>
+                            <button type="button" onclick="document.getElementById('variantsUndoBanner').style.display='none';" style="background: transparent; border: none; color: #92400e; font-size: 1.1rem; cursor: pointer; font-weight: bold;">✕</button>
+                        </div>
+                    </div>
+
+                    <!-- 1. عرض الشبكة الذكية 2D Matrix Grid (المقاسات كأعمدة والألوان كصفوف) -->
+                    <div id="variantMatrixGridContainer" style="border: 1.5px solid #cbd5e1; border-radius: 14px; background: white; padding: 12px; max-height: 280px; overflow: auto; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
+                        <div id="variantMatrixGridContent" style="display: flex; flex-direction: column; gap: 10px;">
+                            <!-- سيتم توليده وتحديثه ديناميكياً -->
+                        </div>
+                    </div>
+
+                    <!-- 2. جدول المقاسات والألوان التفصيلي -->
+                    <div id="productVariantsTableContainer" style="display: none; max-height: 250px; overflow-y: auto; border: 1.5px solid #e2e8f0; border-radius: 12px; background: white;">
                         <table class="bayan-table" id="productVariantsTable" style="margin: 0; width: 100%; font-size: 0.84rem; text-align: center;">
                             <thead style="position: sticky; top: 0; background: #1e293b; color: white; z-index: 5;">
                                 <tr>
@@ -11111,7 +11250,7 @@
                                 <label class="form-label">الرصيد الافتتاحي</label>
                             </div>
                             <input type="number" id="newItemStock" class="search-input metric-input" value="0">
-                            <span class="metric-hint">إجمالي الكمية الحالية بالمخزن</span>
+                            <span class="metric-hint">إجمالي الكمية الحالية بكافة المخازن</span>
                         </div>
                         <div class="bayan-metric-card blue">
                             <div class="metric-header">
@@ -11130,6 +11269,15 @@
                             <input type="number" id="newItemMinStock" class="search-input metric-input" value="10">
                             <span class="metric-hint">تنبيه عند انخفاض الرصيد عن هذا الحد</span>
                         </div>
+                    </div>
+
+                    <!-- تفاصيل أرصدة المخازن للصنف -->
+                    <div id="itemWarehouseDistributionBox" style="margin-top: 18px; padding: 14px; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; display: none;">
+                        <div style="font-weight: 900; font-size: 0.9rem; color: #1e293b; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>🏢 تفاصيل وتوزيع الرصيد حسب المخازن</span>
+                            <span id="itemWarehouseTotalBadge" style="font-size: 0.8rem; background: #e0e7ff; color: #4338ca; padding: 3px 8px; border-radius: 6px; font-weight: bold;"></span>
+                        </div>
+                        <div id="itemWarehouseStocksGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;"></div>
                     </div>
                 </div>
 
@@ -11412,29 +11560,48 @@
                 <div id="transferColMenu" class="hidden"
                     style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 450px; text-align: right; padding: 30px; background: white; border-radius: 24px; box-shadow: 0 30px 70px rgba(0,0,0,0.4); z-index: 2005; border: 1px solid #eee; display: flex; flex-direction: column; animation: modalFadeIn 0.3s ease-out;">
                     <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                         <h3
                             style="margin: 0; font-size: 1.3rem; font-weight: 900; color: #1a4d2e; display: flex; align-items: center; gap: 10px;">
+                            ⚙️ تخصيص أعمدة التحويل
+                        </h3>
+                        <button onclick="toggleTransferColMenu()"
+                            style="background: #f1f5f9; border: none; font-size: 1.2rem; cursor: pointer; color: #64748b; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">&times;</button>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                        <label
+                            style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: #f8fafc; border-radius: 15px; cursor: pointer; border: 1px solid #f1f5f9;">
+                            <span style="font-weight: 800; color: #334155; font-size: 0.95rem;">إظهار المقاس</span>
+                            <input type="checkbox" checked onchange="toggleTransferCol('col-tr-size', this.checked)"
+                                style="width: 20px; height: 20px; accent-color: #27ae60;">
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: #f8fafc; border-radius: 15px; cursor: pointer; border: 1px solid #f1f5f9;">
+                            <span style="font-weight: 800; color: #334155; font-size: 0.95rem;">إظهار اللون</span>
+                            <input type="checkbox" checked onchange="toggleTransferCol('col-tr-color', this.checked)"
+                                style="width: 20px; height: 20px; accent-color: #27ae60;">
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: #f8fafc; border-radius: 15px; cursor: pointer; border: 1px solid #f1f5f9;">
                             <span style="font-weight: 800; color: #334155; font-size: 0.95rem;">إظهار سعر التحويل</span>
                             <input type="checkbox" checked onchange="toggleTransferCol('col-tr-price', this.checked)"
                                 style="width: 20px; height: 20px; accent-color: #27ae60;">
-                            </label>
-                            <label
-                                style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: #f8fafc; border-radius: 15px; cursor: pointer; border: 1px solid #f1f5f9;">
-                                <span style="font-weight: 800; color: #334155; font-size: 0.95rem;">إظهار إجمالي
-                                    القيمة</span>
-                                <input type="checkbox" checked
-                                    onchange="toggleTransferCol('col-tr-total', this.checked)"
-                                    style="width: 20px; height: 20px; accent-color: #27ae60;">
-                            </label>
-                            <label
-                                style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: #f8fafc; border-radius: 15px; cursor: pointer; border: 1px solid #f1f5f9;">
-                                <span style="font-weight: 800; color: #334155; font-size: 0.95rem;">إظهار زر
-                                    الحذف</span>
-                                <input type="checkbox" checked
-                                    onchange="toggleTransferCol('col-tr-delete', this.checked)"
-                                    style="width: 20px; height: 20px; accent-color: #27ae60;">
-                            </label>
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: #f8fafc; border-radius: 15px; cursor: pointer; border: 1px solid #f1f5f9;">
+                            <span style="font-weight: 800; color: #334155; font-size: 0.95rem;">إظهار إجمالي القيمة</span>
+                            <input type="checkbox" checked
+                                onchange="toggleTransferCol('col-tr-total', this.checked)"
+                                style="width: 20px; height: 20px; accent-color: #27ae60;">
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: #f8fafc; border-radius: 15px; cursor: pointer; border: 1px solid #f1f5f9;">
+                            <span style="font-weight: 800; color: #334155; font-size: 0.95rem;">إظهار زر الحذف</span>
+                            <input type="checkbox" checked
+                                onchange="toggleTransferCol('col-tr-delete', this.checked)"
+                                style="width: 20px; height: 20px; accent-color: #27ae60;">
+                        </label>
                     </div>
 
                     <button onclick="toggleTransferColMenu()"
@@ -11555,6 +11722,10 @@
                                 <th class="col-tr-name"
                                     style="padding: 15px; text-align: right; font-size: 0.85rem; color: #475569;">اسم
                                     الصنف</th>
+                                <th class="col-tr-size"
+                                    style="padding: 15px; text-align: center; font-size: 0.85rem; color: #475569; width: 90px;">المقاس</th>
+                                <th class="col-tr-color"
+                                    style="padding: 15px; text-align: center; font-size: 0.85rem; color: #475569; width: 90px;">اللون</th>
                                 <th class="col-tr-stock"
                                     style="padding: 15px; text-align: center; font-size: 0.85rem; color: #475569; width: 100px;">
                                     الرصيد المتاح</th>

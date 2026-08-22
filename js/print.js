@@ -94,7 +94,7 @@ function generateOfflineBarcodeSVG(barcodeText, width = 1.4, height = 30) {
     return '';
 }
 
-function printInvoice(invoiceData) {
+function printInvoice(invoiceData, isAutoPrint = false) {
     // قراءة القالب المحفوظ
     const savedSettings  = JSON.parse(getStore('bayan_print_template_choice') || '{}');
     const templateChoice = invoiceData.template || savedSettings.template || '80mm Standard';
@@ -123,6 +123,11 @@ function printInvoice(invoiceData) {
         || savedPosSettings.printFooterMsg 
         || (document.getElementById('printFooterMsg') ? document.getElementById('printFooterMsg').value.trim() : '') 
         || 'شكراً لتعاملكم معنا!';
+
+    const facebookUrl = invoiceData.facebookUrl 
+        || savedPosSettings.shopFacebookUrl 
+        || (document.getElementById('shopFacebookUrl') ? document.getElementById('shopFacebookUrl').value.trim() : '')
+        || '';
 
     // توحيد وتطبيع الحقول لتغطية كافة أشكال البيانات القادمة من مختلف شاشات التطبيق
     const invoiceNumber = invoiceData.invoiceNumber || invoiceData.id || '';
@@ -153,36 +158,24 @@ function printInvoice(invoiceData) {
     
     // تخصيص العنوان للمرتجعات بدقة
     if (invoiceType.includes('مرتجع') || invoiceType.includes('Return') || invoiceType.includes('ارتجاع')) {
-        if (invoiceType.includes('شراء') || invoiceType.includes('purchase')) {
-            docTitle = 'مرتجع مشتريات';
-        } else {
-            docTitle = 'مرتجع مبيعات';
-        }
+        docTitle = (invoiceType.includes('شراء') || invoiceType.includes('purchase')) ? 'مرتجع مشتريات' : 'مرتجع مبيعات';
     }
 
-    // تنسيق اسم الصنف مع المقاس واللون إن وُجد
     const formatItemPrintName = (item) => {
         let name = item.name || '';
         const sz = item.selectedSize || item.size || '';
         const col = item.selectedColor || item.color || '';
-        if (sz && col) {
-            if (!name.includes(sz) && !name.includes(col)) name += ` (${sz} - ${col})`;
-        } else if (col) {
-            if (!name.includes(col)) name += ` (${col})`;
-        } else if (sz) {
-            if (!name.includes(sz)) name += ` (${sz})`;
-        }
+        if (sz && col) { if (!name.includes(sz) && !name.includes(col)) name += ` (${sz} - ${col})`; }
+        else if (col) { if (!name.includes(col)) name += ` (${col})`; }
+        else if (sz) { if (!name.includes(sz)) name += ` (${sz})`; }
         return escapePrintHtml(name);
     };
 
-    // صفوف الأصناف - النسخة الكاملة (مع السعر والإجمالي)
     const itemsRowsFull = items.map(item => {
-        const qty       = parseFloat(item.qty   || 0);
-        const price     = parseFloat(item.price || 0);
+        const qty = parseFloat(item.qty || 0);
+        const price = parseFloat(item.price || 0);
         const lineTotal = parseFloat(item.total != null ? item.total : price * qty).toFixed(2);
-        const unitName  = item.selectedUnit
-            ? (typeof item.selectedUnit === 'object' ? item.selectedUnit.unitName : item.selectedUnit)
-            : (item.unit || 'قطعة');
+        const unitName = item.selectedUnit ? (typeof item.selectedUnit === 'object' ? item.selectedUnit.unitName : item.selectedUnit) : (item.unit || 'قطعة');
         return `<tr>
             <td style="text-align:right; padding:3px 5px; border:1px solid #000;">${formatItemPrintName(item)}</td>
             <td style="text-align:center; padding:3px 4px; border:1px solid #000;">${qty} ${escapePrintHtml(unitName)}</td>
@@ -191,14 +184,11 @@ function printInvoice(invoiceData) {
         </tr>`;
     }).join('');
 
-    // صفوف الأصناف - النسخة المضغوطة (بدون سعر الوحدة)
     const itemsRowsCompact = items.map(item => {
-        const qty       = parseFloat(item.qty   || 0);
-        const price     = parseFloat(item.price || 0);
+        const qty = parseFloat(item.qty || 0);
+        const price = parseFloat(item.price || 0);
         const lineTotal = parseFloat(item.total != null ? item.total : price * qty).toFixed(2);
-        const unitName  = item.selectedUnit
-            ? (typeof item.selectedUnit === 'object' ? item.selectedUnit.unitName : item.selectedUnit)
-            : (item.unit || 'قطعة');
+        const unitName = item.selectedUnit ? (typeof item.selectedUnit === 'object' ? item.selectedUnit.unitName : item.selectedUnit) : (item.unit || 'قطعة');
         return `<tr>
             <td style="text-align:right; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${formatItemPrintName(item)}</td>
             <td style="text-align:center; padding:2px 4px; border-bottom:1px solid #ccc; font-weight:900;">${qty} ${escapePrintHtml(unitName)}</td>
@@ -206,51 +196,24 @@ function printInvoice(invoiceData) {
         </tr>`;
     }).join('');
 
-    const discount    = parseFloat(invoiceData.discount || 0);
-    const subTotal    = parseFloat(invoiceData.subTotal || 0);
-    const tax         = parseFloat(invoiceData.tax || 0);
-    const taxLabel    = invoiceData.taxLabel || 'إضافة';
-    const globalTax   = parseFloat(invoiceData.globalTax || 0);
+    const discount = parseFloat(invoiceData.discount || 0);
+    const subTotal = parseFloat(invoiceData.subTotal || 0);
+    const tax = parseFloat(invoiceData.tax || 0);
+    const taxLabel = invoiceData.taxLabel || 'إضافة';
+    const globalTax = parseFloat(invoiceData.globalTax || 0);
 
-    const d = {
-        shopName, shopAddress, shopPhone, footerMsg, docTitle,
-        invoiceNumber, invoiceType, date, time, dueDate, cashier, customer,
-        totalAmount, paid, deferred, prevBalance, currentBalance, docType,
-        itemsRowsFull, itemsRowsCompact, discount, subTotal, tax, taxLabel, globalTax
-    };
+    const d = { shopName, shopAddress, shopPhone, footerMsg, facebookUrl, docTitle, invoiceNumber, invoiceType, date, time, dueDate, cashier, customer, totalAmount, paid, deferred, prevBalance, currentBalance, docType, itemsRowsFull, itemsRowsCompact, discount, subTotal, tax, taxLabel, globalTax };
 
-    // ============================================================
-    // بناء المحتوى بحسب القالب
-    // ============================================================
     let content = '';
+    if (templateChoice === 'A4 Professional' || templateChoice === 'A4') content = buildA4Professional(d);
+    else if (templateChoice === 'A5 Modern' || templateChoice === 'A5') content = buildA5Modern(d);
+    else if (templateChoice === '57mm Mobile' || templateChoice === '57mm') content = build57mm(d);
+    else if (templateChoice === '80mm Compact') content = build80mmCompact(d);
+    else content = build80mmStandard(d);
 
-    if (templateChoice === 'A4 Professional' || templateChoice === 'A4') {
-        content = buildA4Professional(d);
-    } else if (templateChoice === 'A5 Modern' || templateChoice === 'A5') {
-        content = buildA5Modern(d);
-    } else if (templateChoice === '57mm Mobile' || templateChoice === '57mm') {
-        content = build57mm(d);
-    } else if (templateChoice === '80mm Compact') {
-        content = build80mmCompact(d);
-    } else {
-        // 80mm Standard (الافتراضي)
-        content = build80mmStandard(d);
-    }
+    const pageWidth = (templateChoice === 'A4 Professional' || templateChoice === 'A4') ? '210mm' : (templateChoice === 'A5 Modern' || templateChoice === 'A5') ? '148mm' : (templateChoice === '57mm Mobile' || templateChoice === '57mm') ? '57mm' : '80mm';
 
-    // تحديد عرض الصفحة للطباعة
-    const pageWidth = (templateChoice === 'A4 Professional' || templateChoice === 'A4') ? '210mm'
-                    : (templateChoice === 'A5 Modern'       || templateChoice === 'A5') ? '148mm'
-                    : (templateChoice === '57mm Mobile'     || templateChoice === '57mm') ? '57mm'
-                    : '80mm';
-
-    // فتح نافذة طباعة مستقلة - نفس أسلوب تقرير الحركة اليومية
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-        alert('⚠️ يرجى السماح بفتح النوافذ المنبثقة لإتمام الطباعة');
-        return;
-    }
-
-    printWindow.document.write(`
+    const fullHtml = `
         <html dir="rtl" lang="ar">
         <head>
             <base href="${window.location.href.split('/').slice(0, -1).join('/') + '/'}">
@@ -258,42 +221,20 @@ function printInvoice(invoiceData) {
             <style>
                 @page { margin: 0; size: ${pageWidth} auto; }
                 *, *::before, *::after { box-sizing: border-box !important; }
-                html, body {
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    width: 100% !important;
-                    max-width: ${pageWidth} !important;
-                    font-family: 'Arial', 'Segoe UI', Tahoma, sans-serif;
-                    text-align: right;
-                    direction: rtl;
-                    color: #000;
-                    background: #fff;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                }
-                table {
-                    box-sizing: border-box !important;
-                    border-collapse: collapse !important;
-                }
-                table th, table td {
-                    color: #000 !important;
-                    box-sizing: border-box !important;
-                }
-                @media print {
-                    .no-print { display: none !important; }
-                    body {
-                        padding: 0 !important;
-                        margin: 0 auto !important;
-                    }
-                }
+                html, body { margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: ${pageWidth} !important; font-family: 'Arial', sans-serif; text-align: right; direction: rtl; color: #000; background: #fff; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                table { border-collapse: collapse !important; width: 100%; }
+                @media print { .no-print { display: none !important; } body { padding: 0 !important; margin: 0 auto !important; } }
             </style>
         </head>
         <body>
+            ${isAutoPrint ? '' : `
             <div class="no-print" style="text-align: center; margin-bottom: 15px; padding: 10px; background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
                 <button onclick="window.print()" style="background: #2563eb; color: white; padding: 10px 25px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🖨️ طباعة الآن</button>
                 <button onclick="window.close()" style="background: #ef4444; color: white; padding: 10px 25px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-right: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">❌ إغلاق</button>
             </div>
+            `}
             ${content}
+            ${isAutoPrint ? '' : `
             <script>
                 window.onload = function() {
                     setTimeout(function() {
@@ -302,9 +243,69 @@ function printInvoice(invoiceData) {
                     }, 250);
                 };
             </script>
+            `}
         </body>
         </html>
-    `);
+    `;
+
+    // 🚀 إذا كانت الطباعة تلقائية (Direct Silent Auto-Print)
+    if (isAutoPrint) {
+        // 1. تجربة الطباعة الصامتة المباشرة في Electron
+        let electronPrinted = false;
+        try {
+            const electron = window.require ? window.require('electron') : (typeof require !== 'undefined' ? require('electron') : null);
+            if (electron && electron.ipcRenderer) {
+                electron.ipcRenderer.invoke('print-direct-silent', fullHtml);
+                electronPrinted = true;
+                if (typeof showToast === 'function') {
+                    showToast("🖨️ تم إرسال الفاتورة إلى الطابعة فوراً بدون نوافذ", "success");
+                }
+                return;
+            }
+        } catch (e) {
+            console.log("Electron silent print fallback:", e);
+        }
+
+        // 2. إذا لم تكن بيئة Electron، نستخدم iframe مخفي للطباعة المباشرة بدون فتح نافذة منبثقة
+        if (!electronPrinted) {
+            let iframe = document.getElementById('silentAutoPrintIframe');
+            if (iframe) iframe.remove();
+
+            iframe = document.createElement('iframe');
+            iframe.id = 'silentAutoPrintIframe';
+            iframe.style.cssText = 'position:fixed; top:-9999px; left:-9999px; width:1px; height:1px; border:0; visibility:hidden; opacity:0; pointer-events:none;';
+            document.body.appendChild(iframe);
+
+            const frameDoc = iframe.contentWindow.document;
+            frameDoc.open();
+            frameDoc.write(fullHtml);
+            frameDoc.close();
+
+            setTimeout(() => {
+                try {
+                    iframe.contentWindow.focus();
+                    iframe.contentWindow.print();
+                } catch(err) {
+                    console.warn("Iframe silent print warning:", err);
+                }
+                setTimeout(() => { if (iframe) iframe.remove(); }, 4000);
+            }, 300);
+
+            if (typeof showToast === 'function') {
+                showToast("🖨️ تم إرسال الفاتورة للطباعة تلقائياً", "success");
+            }
+            return;
+        }
+    }
+
+    // 📄 الطباعة اليدوية التقليدية (فتح نافذة الطباعة)
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        alert('⚠️ يرجى السماح بفتح النوافذ المنبثقة لإتمام الطباعة');
+        return;
+    }
+
+    printWindow.document.write(fullHtml);
     printWindow.document.close();
 }
 
@@ -616,8 +617,9 @@ function build80mmStandard(d) {
     // تصفية أسطر الأصناف من الإيموجيات للحفاظ على جودة الطباعة
     const cleanItemsRows = d.itemsRowsFull.replace(/📤|📥|🔄|🔙|💵|💸|⚖️|🚚|🛒|🛍️|🧺|📦|💰|🌗|✅|⏳/g, '');
 
-    // إنشاء الـ QR Code الحقيقي
-    const qrData = `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    // إنشاء الـ QR Code الحقيقي (يدعم رابط الفيسبوك/المتجر المخصص إن وُجد)
+    const qrData = d.facebookUrl || `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrLabel = d.facebookUrl ? '📱 امسح الكود لمتابعة صفحتنا' : '';
     const qrHtml = generateOfflineInvoiceQR(qrData, 100);
 
     return `
@@ -663,50 +665,50 @@ function build80mmStandard(d) {
 
         <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:8px;">
             <tr style="font-size:13px; font-weight:900;">
-                <td style="padding:3px 5px; border:1px solid #000; font-weight:bold; text-align:right; width:60%;">مبلغ الفاتورة</td>
-                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr; font-weight:bold;">${parseFloat(d.totalAmount).toFixed(2)}</td>
+                <td style="padding:4px 5px; border:1.5px solid #000; font-weight:900; text-align:right; width:60%; color:#000;">مبلغ الفاتورة</td>
+                <td style="padding:4px 5px; border:1.5px solid #000; text-align:center; direction:ltr; font-weight:900; font-size:13px; color:#000;">${parseFloat(d.totalAmount).toFixed(2)}</td>
             </tr>
             ${d.discount && parseFloat(d.discount) > 0 ? `
-            <tr>
-                <td style="padding:3px 5px; border:1px solid #000; font-weight:bold; text-align:right; color:#c0392b;">خصم</td>
-                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr; color:#c0392b;">${parseFloat(d.discount).toFixed(2)}</td>
+            <tr style="font-weight:900;">
+                <td style="padding:3px 5px; border:1px solid #000; font-weight:900; text-align:right; color:#000;">خصم</td>
+                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr; font-weight:900; color:#000;">${parseFloat(d.discount).toFixed(2)}</td>
             </tr>
             ` : ''}
             ${d.tax && parseFloat(d.tax) > 0 ? `
-            <tr>
-                <td style="padding:3px 5px; border:1px solid #000; font-weight:bold; text-align:right;">${d.taxLabel}</td>
-                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr;">${parseFloat(d.tax).toFixed(2)}</td>
+            <tr style="font-weight:900;">
+                <td style="padding:3px 5px; border:1px solid #000; font-weight:900; text-align:right; color:#000;">${d.taxLabel}</td>
+                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr; font-weight:900; color:#000;">${parseFloat(d.tax).toFixed(2)}</td>
             </tr>
             ` : ''}
             ${d.globalTax && parseFloat(d.globalTax) > 0 ? `
-            <tr>
-                <td style="padding:3px 5px; border:1px solid #000; font-weight:bold; text-align:right;">ضريبة القيمة المضافة</td>
-                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr;">${parseFloat(d.globalTax).toFixed(2)}</td>
+            <tr style="font-weight:900;">
+                <td style="padding:3px 5px; border:1px solid #000; font-weight:900; text-align:right; color:#000;">ضريبة القيمة المضافة</td>
+                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr; font-weight:900; color:#000;">${parseFloat(d.globalTax).toFixed(2)}</td>
             </tr>
             ` : ''}
             ${!isCashBuyer && parseFloat(d.prevBalance) !== 0 ? `
-            <tr>
-                <td style="padding:3px 5px; border:1px solid #000; font-weight:bold; text-align:right;">الرصيد السابق</td>
-                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr;">${parseFloat(d.prevBalance).toFixed(2)}</td>
+            <tr style="font-weight:900;">
+                <td style="padding:3px 5px; border:1px solid #000; font-weight:900; text-align:right; color:#000;">الرصيد السابق</td>
+                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr; font-weight:900; color:#000;">${parseFloat(d.prevBalance).toFixed(2)}</td>
             </tr>
             <tr style="background:#eef2f6; font-weight:900;">
-                <td style="padding:4px 5px; border:1px solid #000; font-weight:900; text-align:right;">الإجمالي المطلوب</td>
-                <td style="padding:4px 5px; border:1px solid #000; text-align:center; direction:ltr; font-weight:900;">${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance)).toFixed(2)}</td>
+                <td style="padding:4px 5px; border:1.5px solid #000; font-weight:900; text-align:right; color:#000;">الإجمالي المطلوب</td>
+                <td style="padding:4px 5px; border:1.5px solid #000; text-align:center; direction:ltr; font-weight:900; font-size:13px; color:#000;">${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance)).toFixed(2)}</td>
             </tr>
             ` : ''}
-            <tr>
-                <td style="padding:3px 5px; border:1px solid #000; font-weight:bold; text-align:right; color:#15803d;">المدفوع</td>
-                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr; font-weight:bold; color:#15803d;">${parseFloat(d.paid).toFixed(2)}</td>
+            <tr style="font-weight:900; background:#f9f9f9;">
+                <td style="padding:5px 5px; border:2px solid #000; font-weight:900; font-size:14px; text-align:right; color:#000;">المدفوع</td>
+                <td style="padding:5px 5px; border:2px solid #000; text-align:center; direction:ltr; font-weight:900; font-size:14px; color:#000;">${parseFloat(d.paid).toFixed(2)}</td>
             </tr>
             ${!isCashBuyer ? `
-            <tr style="background:#fef2f2; font-weight:900;">
-                <td style="padding:4px 5px; border:1px solid #000; font-weight:bold; text-align:right; color:#b91c1c;">الرصيد المستحق (الباقي)</td>
-                <td style="padding:4px 5px; border:1px solid #000; text-align:center; direction:ltr; font-weight:900; color:#b91c1c;">${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance) - parseFloat(d.paid)).toFixed(2)}</td>
+            <tr style="font-weight:900;">
+                <td style="padding:5px 5px; border:2px solid #000; font-weight:900; font-size:13px; text-align:right; color:#000;">الرصيد المستحق (الباقي)</td>
+                <td style="padding:5px 5px; border:2px solid #000; text-align:center; direction:ltr; font-weight:900; font-size:13px; color:#000;">${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance) - parseFloat(d.paid)).toFixed(2)}</td>
             </tr>
             ` : (parseFloat(d.paid) > parseFloat(d.totalAmount) ? `
-            <tr style="background:#f0fdf4; font-weight:900;">
-                <td style="padding:3px 5px; border:1px solid #000; font-weight:bold; text-align:right;">الباقي للعميل</td>
-                <td style="padding:3px 5px; border:1px solid #000; text-align:center; direction:ltr; font-weight:900;">${(parseFloat(d.paid) - parseFloat(d.totalAmount)).toFixed(2)}</td>
+            <tr style="font-weight:900;">
+                <td style="padding:4px 5px; border:1.5px solid #000; font-weight:900; font-size:13px; text-align:right; color:#000;">الباقي للعميل</td>
+                <td style="padding:4px 5px; border:1.5px solid #000; text-align:center; direction:ltr; font-weight:900; font-size:13px; color:#000;">${(parseFloat(d.paid) - parseFloat(d.totalAmount)).toFixed(2)}</td>
             </tr>
             ` : '')}
         </table>
@@ -716,6 +718,7 @@ function build80mmStandard(d) {
             
             <div style="margin-top:10px; text-align:center;">
                 ${qrHtml}
+                ${qrLabel ? `<div style="font-size:10px; font-weight:bold; margin-top:3px; color:#000;">${qrLabel}</div>` : ''}
             </div>
         </div>
     </div>`;
@@ -728,7 +731,8 @@ function build80mmCompact(d) {
     // تصفية الأصناف من الإيموجيات
     const cleanItemsRows = d.itemsRowsCompact.replace(/📤|📥|🔄|🔙|💵|💸|⚖️|🚚|🛒|🛍️|🧺|📦|💰|🌗|✅|⏳/g, '');
 
-    const qrData = `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrData = d.facebookUrl || `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrLabel = d.facebookUrl ? '📱 تابع صفحتنا' : '';
     const qrHtml = generateOfflineInvoiceQR(qrData, 100);
 
     return `
@@ -778,17 +782,17 @@ function build80mmCompact(d) {
                 <span>${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance)).toFixed(2)}</span>
             </div>
             ` : ''}
-            <div style="display:flex; justify-content:space-between; border-top:1px dashed #000; padding-top:2px; margin-top:2px; color:#15803d;">
+            <div style="display:flex; justify-content:space-between; border-top:2px solid #000; padding-top:4px; margin-top:3px; font-weight:900; font-size:15px; color:#000;">
                 <span>المدفوع:</span>
                 <span>${parseFloat(d.paid).toFixed(2)}</span>
             </div>
             ${!isCashBuyer ? `
-            <div style="display:flex; justify-content:space-between; font-size:14px; border-top:1.5px solid #000; padding-top:3px; margin-top:3px; color:#b91c1c;">
+            <div style="display:flex; justify-content:space-between; font-size:15px; border-top:2px solid #000; padding-top:4px; margin-top:3px; font-weight:900; color:#000;">
                 <span>الرصيد المستحق (الباقي):</span>
                 <span>${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance) - parseFloat(d.paid)).toFixed(2)}</span>
             </div>
             ` : (parseFloat(d.paid) > parseFloat(d.totalAmount) ? `
-            <div style="display:flex; justify-content:space-between; font-size:13px; border-top:1px dashed #000; padding-top:2px; margin-top:2px;">
+            <div style="display:flex; justify-content:space-between; font-size:14px; border-top:1.5px solid #000; padding-top:3px; margin-top:3px; font-weight:900; color:#000;">
                 <span>الباقي للعميل:</span>
                 <span>${(parseFloat(d.paid) - parseFloat(d.totalAmount)).toFixed(2)}</span>
             </div>
@@ -799,6 +803,7 @@ function build80mmCompact(d) {
             <div style="white-space: pre-line;">${d.footerMsg}</div>
             <div style="margin-top:10px; text-align:center;">
                 ${qrHtml}
+                ${qrLabel ? `<div style="font-size:10px; font-weight:bold; margin-top:3px; color:#000;">${qrLabel}</div>` : ''}
             </div>
         </div>
     </div>`;
@@ -807,7 +812,8 @@ function build80mmCompact(d) {
 // ─── 57mm Mobile ──────────────────────────────────────────────
 function build57mm(d) {
     const isCashBuyer = !d.customer || (window.isGenericCashPartner && window.isGenericCashPartner(d.customer)) || d.customer === '-' || d.customer === '---' || d.customer.includes('نقدي');
-    const qrData = `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrData = d.facebookUrl || `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrLabel = d.facebookUrl ? '📱 صفحتنا على فيسبوك' : '';
     const qrHtml = generateOfflineInvoiceQR(qrData, 90);
 
     return `
@@ -840,15 +846,15 @@ function build57mm(d) {
             <span>الإجمالي المطلوب:</span><span>${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance)).toFixed(2)}</span>
         </div>
         ` : ''}
-        <div style="display:flex; justify-content:space-between; font-size:10px; color:#15803d;">
+        <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:900; border-top:1.5px solid #000; padding-top:3px; margin-top:2px; color:#000;">
             <span>المدفوع:</span><span>${parseFloat(d.paid).toFixed(2)}</span>
         </div>
         ${!isCashBuyer ? `
-        <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:bold; border-top:1px dashed #000; padding-top:2px; color:#b91c1c;">
+        <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:900; border-top:1.5px solid #000; padding-top:3px; color:#000;">
             <span>الرصيد المستحق:</span><span>${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance) - parseFloat(d.paid)).toFixed(2)}</span>
         </div>
         ` : (parseFloat(d.paid) > parseFloat(d.totalAmount) ? `
-        <div style="display:flex; justify-content:space-between; font-size:10px;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:900; border-top:1px solid #000; padding-top:2px; color:#000;">
             <span>الباقي:</span><span>${(parseFloat(d.paid) - parseFloat(d.totalAmount)).toFixed(2)}</span>
         </div>
         ` : '')}
@@ -856,6 +862,7 @@ function build57mm(d) {
             ${d.footerMsg}
             <div style="margin-top:6px; text-align:center;">
                 ${qrHtml}
+                ${qrLabel ? `<div style="font-size:8.5px; font-weight:bold; margin-top:2px; color:#000;">${qrLabel}</div>` : ''}
             </div>
         </div>
     </div>`;
@@ -864,7 +871,8 @@ function build57mm(d) {
 // ─── A4 Professional ──────────────────────────────────────────
 function buildA4Professional(d) {
     const isCashBuyer = !d.customer || (window.isGenericCashPartner && window.isGenericCashPartner(d.customer)) || d.customer === '-' || d.customer === '---' || d.customer.includes('نقدي');
-    const qrData = `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrData = d.facebookUrl || `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrLabel = d.facebookUrl ? '📱 امسح الكود لزيارة صفحتنا' : '';
     const qrHtml = generateOfflineInvoiceQR(qrData, 110);
 
     return `
@@ -914,6 +922,7 @@ function buildA4Professional(d) {
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
             <div style="text-align:center; padding:10px;">
                 ${qrHtml}
+                ${qrLabel ? `<div style="font-size:11px; font-weight:bold; margin-top:4px; color:#333;">${qrLabel}</div>` : ''}
             </div>
             <table style="width:300px; background:#f9f9f9; padding:15px; border-radius:6px; border:1px solid #eee;">
                 <tr>
@@ -931,18 +940,18 @@ function buildA4Professional(d) {
                 </tr>
                 ` : ''}
                 <tr>
-                    <td style="color:#27ae60; font-weight:bold; padding:3px 0;">المدفوع:</td>
-                    <td style="text-align:left; font-weight:bold; color:#27ae60;">${parseFloat(d.paid).toFixed(2)}</td>
+                    <td style="color:#000; font-weight:900; font-size:1.05rem; padding:4px 0;">المدفوع:</td>
+                    <td style="text-align:left; font-weight:900; font-size:1.05rem; color:#000;">${parseFloat(d.paid).toFixed(2)}</td>
                 </tr>
                 ${!isCashBuyer ? `
                 <tr style="background:#fef2f2;">
-                    <td style="color:#c0392b; font-weight:bold; padding:4px 0;">الرصيد المستحق (الباقي):</td>
-                    <td style="text-align:left; font-weight:bold; color:#c0392b;">${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance) - parseFloat(d.paid)).toFixed(2)}</td>
+                    <td style="color:#000; font-weight:900; font-size:1.05rem; padding:4px 0;">الرصيد المستحق (الباقي):</td>
+                    <td style="text-align:left; font-weight:900; font-size:1.05rem; color:#000;">${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance) - parseFloat(d.paid)).toFixed(2)}</td>
                 </tr>
                 ` : (parseFloat(d.paid) > parseFloat(d.totalAmount) ? `
                 <tr>
-                    <td style="padding:3px 0;">الباقي للعميل:</td>
-                    <td style="text-align:left;">${(parseFloat(d.paid) - parseFloat(d.totalAmount)).toFixed(2)}</td>
+                    <td style="padding:4px 0; font-weight:900; color:#000;">الباقي للعميل:</td>
+                    <td style="text-align:left; font-weight:900; color:#000;">${(parseFloat(d.paid) - parseFloat(d.totalAmount)).toFixed(2)}</td>
                 </tr>
                 ` : '')}
             </table>
@@ -958,7 +967,8 @@ function buildA4Professional(d) {
 // ─── A5 Modern ────────────────────────────────────────────────
 function buildA5Modern(d) {
     const isCashBuyer = !d.customer || (window.isGenericCashPartner && window.isGenericCashPartner(d.customer)) || d.customer === '-' || d.customer === '---' || d.customer.includes('نقدي');
-    const qrData = `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrData = d.facebookUrl || `Inv: #${d.invoiceNumber} | Total: ${parseFloat(d.totalAmount).toFixed(2)} | Date: ${d.date}`;
+    const qrLabel = d.facebookUrl ? '📱 تابع صفحتنا' : '';
     const qrHtml = generateOfflineInvoiceQR(qrData, 100);
 
     return `
@@ -1011,18 +1021,18 @@ function buildA5Modern(d) {
                 </tr>
                 ` : ''}
                 <tr>
-                    <td style="color:#27ae60; font-weight:bold; padding:3px 0;">المدفوع:</td>
-                    <td style="text-align:left; color:#27ae60; font-weight:bold;">${parseFloat(d.paid).toFixed(2)}</td>
+                    <td style="color:#000; font-weight:900; font-size:1.05rem; padding:4px 0;">المدفوع:</td>
+                    <td style="text-align:left; color:#000; font-weight:900; font-size:1.05rem;">${parseFloat(d.paid).toFixed(2)}</td>
                 </tr>
                 ${!isCashBuyer ? `
                 <tr style="background:#fef2f2;">
-                    <td style="color:#c0392b; font-weight:bold; padding:4px 0;">الرصيد المستحق (الباقي):</td>
-                    <td style="text-align:left; font-weight:bold; color:#c0392b;">${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance) - parseFloat(d.paid)).toFixed(2)}</td>
+                    <td style="color:#000; font-weight:900; font-size:1.05rem; padding:4px 0;">الرصيد المستحق (الباقي):</td>
+                    <td style="text-align:left; font-weight:900; font-size:1.05rem; color:#000;">${(parseFloat(d.totalAmount) + parseFloat(d.prevBalance) - parseFloat(d.paid)).toFixed(2)}</td>
                 </tr>
                 ` : (parseFloat(d.paid) > parseFloat(d.totalAmount) ? `
                 <tr>
-                    <td style="padding:3px 0;">الباقي للعميل:</td>
-                    <td style="text-align:left;">${(parseFloat(d.paid) - parseFloat(d.totalAmount)).toFixed(2)}</td>
+                    <td style="padding:4px 0; font-weight:900; color:#000;">الباقي للعميل:</td>
+                    <td style="text-align:left; font-weight:900; color:#000;">${(parseFloat(d.paid) - parseFloat(d.totalAmount)).toFixed(2)}</td>
                 </tr>
                 ` : '')}
             </table>
@@ -1034,3 +1044,8 @@ function buildA5Modern(d) {
         </div>
     </div>`;
 }
+
+window.printInvoice = printInvoice;
+window.savePrintTemplate = savePrintTemplate;
+window.addToMyTemplates = addToMyTemplates;
+window.openFreeEditor = openFreeEditor;

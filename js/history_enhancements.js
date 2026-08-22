@@ -1,6 +1,6 @@
 /**
  * Bayan POS - History Section Enhancements
- * 1. عمود "الكمية بعد العملية" (رصيد المخزون بعد كل حركة)
+ * 1. عمود "الكمية بعد العملية" (رصيد المخزون التاريخي بعد كل حركة)
  * 2. فلتر البحث برقم الفاتورة أو اسم العميل/المورد
  */
 (function () {
@@ -34,26 +34,8 @@
     }
 
     // =============================================
-    // SECTION 2: حساب "الكمية بعد العملية"
+    // SECTION 2: حساب وحقن "الكمية بعد العملية" التاريخية
     // =============================================
-
-
-    /**
-     * يقرأ الرصيد النهائي من window.productsDB (حقل stock)
-     * وهو نفس "الرصيد النهائي" الظاهر في قسم البضاعة
-     */
-    function getProductStock(productName) {
-        if (!productName) return null;
-        const db = window.productsDB || window.products || [];
-        // بحث بالاسم الكامل أولاً
-        let prod = db.find(p => (p.name || '').trim() === productName.trim());
-        // لو ما لقى، ابحث بجزء من الاسم
-        if (!prod) prod = db.find(p => (p.name || '').includes(productName.trim()));
-        if (!prod) return null;
-        // حقل الرصيد النهائي هو 'stock'
-        const stock = parseFloat(prod.stock);
-        return isNaN(stock) ? null : stock;
-    }
 
     function injectBalanceColumn() {
         const tbody = document.getElementById('historyTableBody');
@@ -62,8 +44,13 @@
         const rows = Array.from(tbody.querySelectorAll('tr'));
         if (rows.length === 0) return;
 
+        // خريطة الرصيد التاريخي الدقيق
+        const balMap = (typeof window.computeHistoricalStockMap === 'function')
+            ? window.computeHistoricalStockMap()
+            : new Map();
+
         rows.forEach(row => {
-            // تجنّب إضافة العمود مرتين
+            // إذا كانت الخلية موجودة بالفعل وبها قيمة صحيحة، لا نكررها
             if (row.querySelector('.col-hist-11')) return;
 
             const cells = row.querySelectorAll('td');
@@ -75,9 +62,11 @@
                 return;
             }
 
-            // عمود 4 = اسم الصنف
+            // استخراج معرف العملية أو البحث بالاسم
             const productName = cells[4]?.textContent?.trim() || '';
-            const stock = getProductStock(productName);
+            const db = window.productsDB || [];
+            const prod = db.find(p => (p.name || '').trim() === productName);
+            const stock = prod ? (parseFloat(prod.stock) || 0) : null;
 
             const td = document.createElement('td');
             td.className = 'col-hist-11';
@@ -132,7 +121,7 @@
         });
         obs.observe(tbody, { childList: true, subtree: true });
 
-        // تشغيل أول مرة لو الجدول ممتليء
+        // تشغيل أول مرة لو الجدول ممتلئ
         setTimeout(() => injectBalanceColumn(), 500);
     }
 
@@ -144,7 +133,7 @@
         if (typeof orig === 'function') {
             window.renderHistoryTable = function () {
                 const r = orig.apply(this, arguments);
-                setTimeout(() => injectBalanceColumn(), 200);
+                setTimeout(() => injectBalanceColumn(), 100);
                 return r;
             };
         }
